@@ -138,8 +138,8 @@
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/store/authStore.js";
-import { getChildDetail } from "@/services/api.js";
-import { loadGoogleMaps, createMap, addMarker } from "@/services/maps.js";
+import { getChildDetail, getKmlUrl } from "@/services/api.js";
+import { loadGoogleMaps, createMap, addMarker, addKmlLayer } from "@/services/maps.js";
 import VisitModal from "@/components/VisitModal.vue";
 
 const props = defineProps({
@@ -161,6 +161,7 @@ const showModal      = ref(false);
 const selectedHouse  = ref(null);
 
 let mapInstance = null;
+let kmlLayer    = null;
 const markers   = [];
 
 // フィルタ済み住戸
@@ -242,6 +243,11 @@ async function initMap() {
 
     mapInstance = createMap(mapContainer.value, center, 15);
 
+    // KML オーバーレイ（区域全体のKMLを、この子カード番号で絞り込んで表示）
+    if (cardInfo.value?.KML) {
+      kmlLayer = addKmlLayer(mapInstance, getKmlUrl(cardInfo.value.KML, props.childNo));
+    }
+
     // 住戸マーカー
     for (const h of houses.value) {
       if (h.CSVLat && h.CSVLng) {
@@ -276,6 +282,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  if (kmlLayer) kmlLayer.setMap(null);
   markers.forEach(m => { if (m.map) m.map = null; });
 });
 </script>

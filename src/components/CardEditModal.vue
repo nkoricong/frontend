@@ -55,11 +55,11 @@
               <select
                 v-if="mode === 'checkout' || mode === 'fix'"
                 class="form-select form-select-sm"
-                v-model="form.Arrenger"
+                v-model.number="form.Arrenger"
               >
-                <option v-for="u in users" :key="u.ID" :value="u.UserName">{{ u.UserName }}</option>
+                <option v-for="u in users" :key="u.ID" :value="u.ID">{{ u.UserName }}</option>
               </select>
-              <input v-else class="form-control form-control-sm" :value="form.Arrenger" disabled />
+              <input v-else class="form-control form-control-sm" :value="arrengerDisplayName" disabled />
             </div>
 
             <div class="col-6" v-if="mode === 'checkout' || mode === 'fix'">
@@ -182,6 +182,12 @@ const modalMessage = computed(() => {
 
 const termLabel = computed(() => (form.value.Term ? isoToTermLabel(form.value.Term) : ""));
 
+// 返却モード等、責任者が読み取り専用表示になる場合はIDをユーザー名に変換して表示する
+const arrengerDisplayName = computed(() => {
+  const id = form.value.Arrenger;
+  return props.users.find(u => Number(u.ID) === Number(id))?.UserName ?? id ?? "-";
+});
+
 watch(() => props.modelValue, (open) => {
   if (!open || !props.card) return;
   saveError.value = "";
@@ -197,7 +203,7 @@ function initForm() {
     form.value = {
       Term:              term,
       Group:             props.groups[0] ?? c.Group,
-      Arrenger:          props.users[0]?.UserName ?? c.Arrenger,
+      Arrenger:          c.Arrenger ?? props.users[0]?.ID ?? null,
       CheckoutDate:      today,
       LimitDate:         computeLimitDate(term, c.Color),
       ReturnDate:        "",

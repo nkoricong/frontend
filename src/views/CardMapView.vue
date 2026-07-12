@@ -130,7 +130,7 @@
 <script setup>
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
-import { getChildListByCard } from "@/services/api.js";
+import { getChildListByCard, getKmlUrl } from "@/services/api.js";
 import { loadGoogleMaps, createMap, addKmlLayer } from "@/services/maps.js";
 
 const props = defineProps({
@@ -177,7 +177,7 @@ async function initMap() {
     mapInstance = createMap(mapContainer.value, center, 15);
 
     if (cardInfo.value?.KML) {
-      kmlLayer = addKmlLayer(mapInstance, cardInfo.value.KML);
+      kmlLayer = addKmlLayer(mapInstance, getKmlUrl(cardInfo.value.KML));
     }
   } catch (e) {
     console.error("地図初期化エラー:", e);

@@ -109,7 +109,6 @@
           <thead class="table-light">
             <tr>
               <th class="text-center">No.</th>
-              <th class="text-center">色</th>
               <th>地区・町名</th>
               <th class="text-center">ステータス</th>
               <th class="text-center">枚数</th>
@@ -121,11 +120,8 @@
           </thead>
           <tbody>
             <tr v-for="card in filteredCards" :key="card.CardNo">
-              <td class="text-center fw-bold">{{ card.CardNo }}</td>
               <td class="text-center">
-                <span class="color-swatch" :style="{ backgroundColor: colorBg(card.Color) }">
-                  {{ card.Color === '★' ? '★' : '' }}
-                </span>
+                <span class="cardno-chip" :style="{ backgroundColor: colorBg(card.Color) }">{{ card.CardNo }}</span>
               </td>
               <td>
                 <button class="btn btn-link p-0 text-start fw-bold" @click="openCardMap(card)">
@@ -136,7 +132,7 @@
               <td class="text-center">
                 <button
                   class="btn btn-sm rounded-pill"
-                  :class="statusBadgeClass(card.Status)"
+                  :style="statusPillStyle(card.Status)"
                   :disabled="!canEdit || savingCardNo === card.CardNo"
                   @click="openEditModal(card)"
                 >
@@ -181,12 +177,12 @@
           <div class="card-body py-2 px-3">
             <div class="d-flex justify-content-between align-items-start mb-1">
               <h6 class="mb-0">
-                <span class="cardno-badge">{{ card.CardNo }}</span>
+                <span class="cardno-chip" :style="{ backgroundColor: colorBg(card.Color) }">{{ card.CardNo }}</span>
                 <button class="btn btn-link p-0" @click="openCardMap(card)">{{ card.TownName || card.Area }}</button>
               </h6>
               <button
                 class="btn btn-sm rounded-pill"
-                :class="statusBadgeClass(card.Status)"
+                :style="statusPillStyle(card.Status)"
                 :disabled="!canEdit || savingCardNo === card.CardNo"
                 @click="openEditModal(card)"
               >
@@ -339,13 +335,18 @@ function colorBg(color) {
   return map[color] || "#e0e0e0";
 }
 
-function statusBadgeClass(status) {
-  const map = {
-    "貸出中": "bg-primary text-white",
-    "返却済": "bg-secondary text-white",
-    "整備中": "bg-warning text-dark",
-  };
-  return map[status] || "bg-light text-dark";
+// ステータスピルの色（オリジナル版のBootstrap4色をそのまま踏襲。BS5のutilityクラスでは
+// bg-info/bg-successの色調がBS4と異なるため、hex直指定で色を合わせている）
+const STATUS_COLORS = {
+  "貸出中": { bg: "#ffc107", color: "#212529" },
+  "返却済": { bg: "#17a2b8", color: "#fff" },
+  "整備中": { bg: "#6c757d", color: "#fff" },
+  "完了":   { bg: "#28a745", color: "#fff" },
+};
+
+function statusPillStyle(status) {
+  const c = STATUS_COLORS[status] || STATUS_COLORS["整備中"];
+  return { backgroundColor: c.bg, color: c.color };
 }
 
 function formatTerm(term) {
@@ -433,24 +434,17 @@ onMounted(fetchData);
   z-index: 3000;
 }
 
-.color-swatch {
+.cardno-chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 20px;
-  border: 1px solid #999;
-  border-radius: 4px;
-  font-size: 12px;
-  color: #333;
-}
-
-.cardno-badge {
-  border: 2px solid #007bff;
-  border-radius: 8px;
+  min-width: 36px;
   padding: 2px 8px;
+  border: 1px solid rgba(0,0,0,0.15);
+  border-radius: 8px;
   font-weight: bold;
-  margin-right: 6px;
   font-size: 14px;
+  color: #333;
+  margin-right: 6px;
 }
 </style>
