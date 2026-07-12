@@ -182,8 +182,19 @@ export async function getMinisterOptions(group) {
 }
 
 /** 子カードの担当奉仕者を変更する */
-export async function assignChildMinister(childId, ministerId) {
-  return callWorker({ funcName: "assignChildMinister", ChildID: childId, MinisterID: ministerId });
+export async function assignChildMinister(childId, ministerId, startDate = null, limitDate = null) {
+  return callWorker({
+    funcName:  "assignChildMinister",
+    ChildID:   childId,
+    MinisterID: ministerId,
+    StartDate: startDate,
+    LimitDate: limitDate,
+  });
+}
+
+/** 子カードを返却する（ステータスを返却済にし、checkout_dateを本日付けにする） */
+export async function returnChildCard(childId) {
+  return callWorker({ funcName: "returnChildCard", ChildID: childId });
 }
 
 /** 子カード全件を取得する（管理画面用） */

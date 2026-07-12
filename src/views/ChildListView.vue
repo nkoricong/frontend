@@ -76,7 +76,15 @@
                 <span class="cardno-badge">{{ child.CARDNO }}-{{ child.CHILDNO }}</span>
                 {{ child.CHILDBLOCK }}
               </h5>
-              <span :class="statusBadgeClass(child.CHILDSTATUS)">{{ child.CHILDSTATUS }}</span>
+              <button
+                type="button"
+                class="btn btn-sm rounded-pill"
+                :class="statusBadgeClass(child.CHILDSTATUS)"
+                :disabled="!canAssign"
+                @click.stop="openAssignModal(child)"
+              >
+                {{ child.CHILDSTATUS }}
+              </button>
             </div>
 
             <p class="mb-1 small text-muted">
@@ -95,9 +103,12 @@
               <span v-if="isOverdue(child)" class="text-danger ms-1">（期限超過）</span>
             </p>
 
-            <div class="d-flex justify-content-end mt-2" v-if="canAssign">
+            <div class="d-flex justify-content-end gap-2 mt-2" v-if="canAssign">
               <button class="btn btn-sm btn-outline-secondary" @click.stop="openAssignModal(child)">
                 <i class="fas fa-user-edit"></i> 割当変更
+              </button>
+              <button class="btn btn-sm btn-outline-danger" @click.stop="returnCard(child)">
+                <i class="fas fa-undo"></i> 返却
               </button>
             </div>
 
@@ -133,19 +144,26 @@
         </div>
 
         <div class="modal-body">
-          <label class="form-label">割当先の奉仕者</label>
-          <select class="form-select" v-model="selectedMinisterId">
+          <label class="form-label">奉仕者</label>
+          <select class="form-select mb-3" v-model="selectedMinisterId">
             <option value="">未割当にする</option>
             <option v-for="m in ministers" :key="m.ID" :value="m.ID">{{ m.UserName }}</option>
           </select>
+
+          <label class="form-label">使用開始日</label>
+          <input type="date" class="form-control mb-3" v-model="assignStartDate" />
+
+          <label class="form-label">使用期限</label>
+          <input type="date" class="form-control" v-model="assignLimitDate" />
+
           <p v-if="assignError" class="text-danger small mt-2">{{ assignError }}</p>
         </div>
 
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="closeAssignModal">閉じる</button>
           <button class="btn btn-primary" @click="submitAssign" :disabled="assigning">
-            <span v-if="assigning"><i class="fas fa-spinner fa-spin"></i> 割当中...</span>
-            <span v-else>割当</span>
+            <span v-if="assigning"><i class="fas fa-spinner fa-spin"></i> 変更中...</span>
+            <span v-else>貸出期間変更</span>
           </button>
         </div>
 
@@ -160,7 +178,7 @@
 import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/store/authStore.js";
-import { getGroupChildList, getMinisterOptions, assignChildMinister } from "@/services/api.js";
+import { getGroupChildList, getMinisterOptions, assignChildMinister, returnChildCard } from "@/services/api.js";
 
 const router    = useRouter();
 const authStore = useAuthStore();
@@ -173,8 +191,10 @@ const filterMinisterId = ref("");
 const filterStatus     = ref("");
 const overdueOnly      = ref(false);
 
-const assignTarget      = ref(null);
+const assignTarget       = ref(null);
 const selectedMinisterId = ref("");
+const assignStartDate    = ref("");
+const assignLimitDate    = ref("");
 const assigning          = ref(false);
 const assignError        = ref("");
 
@@ -235,7 +255,28 @@ function openChildMap(child) {
 function openAssignModal(child) {
   assignTarget.value       = child;
   selectedMinisterId.value = child.MINISTER || "";
+  assignStartDate.value    = child.CHILDSTARTDATE || "";
+  assignLimitDate.value    = child.CHILDLIMITDATE || "";
   assignError.value        = "";
+}
+
+// 返却：確認ダイアログの後、モーダルを介さず即座にステータスを返却済にする
+async function returnCard(child) {
+  if (!confirm(`${child.CARDNO}-${child.CHILDNO}のカードを返却します。よろしいですか？`)) return;
+  try {
+    const res = await returnChildCard(child.CHILDID);
+    if (res.status === "success") {
+      const idx = cards.value.findIndex(c => c.CHILDID === child.CHILDID);
+      if (idx !== -1) {
+        cards.value[idx].CHILDSTATUS       = res.child?.CHILDSTATUS ?? "返却済";
+        cards.value[idx].CHILDCHECKOUTDATE = res.child?.CHILDCHECKOUTDATE ?? cards.value[idx].CHILDCHECKOUTDATE;
+      }
+    } else {
+      alert(res.message || "返却に失敗しました");
+    }
+  } catch (e) {
+    alert(e.message);
+  }
 }
 
 function closeAssignModal() {
@@ -247,13 +288,20 @@ async function submitAssign() {
   assigning.value   = true;
   assignError.value = "";
   try {
-    const res = await assignChildMinister(assignTarget.value.CHILDID, selectedMinisterId.value || null);
+    const res = await assignChildMinister(
+      assignTarget.value.CHILDID,
+      selectedMinisterId.value || null,
+      assignStartDate.value || null,
+      assignLimitDate.value || null,
+    );
     if (res.status === "success") {
       const idx = cards.value.findIndex(c => c.CHILDID === assignTarget.value.CHILDID);
       if (idx !== -1) {
         cards.value[idx].MINISTER     = res.child?.MINISTER     ?? (selectedMinisterId.value || null);
         cards.value[idx].MINISTERNAME = res.child?.MINISTERNAME ?? (ministers.value.find(m => Number(m.ID) === Number(selectedMinisterId.value))?.UserName ?? "");
-        if (res.child?.CHILDSTATUS) cards.value[idx].CHILDSTATUS = res.child.CHILDSTATUS;
+        if (res.child?.CHILDSTATUS)    cards.value[idx].CHILDSTATUS    = res.child.CHILDSTATUS;
+        if (res.child?.CHILDSTARTDATE) cards.value[idx].CHILDSTARTDATE = res.child.CHILDSTARTDATE;
+        if (res.child?.CHILDLIMITDATE) cards.value[idx].CHILDLIMITDATE = res.child.CHILDLIMITDATE;
       }
       closeAssignModal();
     } else {
