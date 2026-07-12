@@ -115,58 +115,94 @@
               <th>グループ／責任者</th>
               <th>貸出・期限</th>
               <th>メモ</th>
+              <th class="text-center">履歴</th>
               <th v-if="canEdit" class="text-center">操作</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="card in filteredCards" :key="card.CardNo">
-              <td class="text-center">
-                <span class="cardno-chip" :style="{ backgroundColor: colorBg(card.Color) }">{{ card.CardNo }}</span>
-              </td>
-              <td>
-                <button class="btn btn-link p-0 text-start fw-bold" @click="openCardMap(card)">
-                  {{ card.TownName || card.Area }}
-                </button>
-                <div class="small text-muted">{{ card.Area }}（{{ card.Childs ?? 0 }}枚）</div>
-              </td>
-              <td class="text-center">
-                <button
-                  class="btn btn-sm rounded-pill"
-                  :style="statusPillStyle(card.Status)"
-                  :disabled="!canEdit || savingCardNo === card.CardNo"
-                  @click="openEditModal(card)"
-                >
-                  {{ card.Status }}
-                </button>
-              </td>
-              <td class="text-center">{{ card.Childs ?? 0 }}</td>
-              <td>
-                <div class="small">{{ card.Group || "-" }}</div>
-                <div class="small text-muted">責:{{ card.Arrenger || "-" }}</div>
-              </td>
-              <td>
-                <div class="small">開始:{{ formatTerm(card.Term) }} ／ 貸出:{{ card.CheckoutDate || "-" }}</div>
-                <div v-if="card.Status === '貸出中'" class="small" :class="{ 'text-danger fw-bold': isOverdue(card) }">
-                  使用期限:{{ card.LimitDate || "-" }}
-                </div>
-                <div v-else-if="card.Status === '返却済'" class="small" :class="{ 'text-danger fw-bold': card.Renew == 1 }">
-                  次回使用可能日:{{ card.NextAvailableDate || "-" }}<span v-if="card.Renew == 1">※休眠期間不足</span>
-                </div>
-              </td>
-              <td class="small">{{ card.Description }}</td>
-              <td v-if="canEdit" class="text-center">
-                <div v-if="card.Status === '返却済'" class="d-flex flex-column gap-1">
-                  <button class="btn btn-sm btn-warning" :disabled="savingCardNo === card.CardNo" @click="openCheckoutModal(card)">貸出</button>
-                  <button class="btn btn-sm btn-secondary" :disabled="savingCardNo === card.CardNo" @click="directChangeStatus(card, '整備中')">整備</button>
-                </div>
-                <div v-else-if="card.Status === '貸出中'">
-                  <button class="btn btn-sm btn-info text-white" :disabled="savingCardNo === card.CardNo" @click="openReturnModal(card)">返却</button>
-                </div>
-                <div v-else-if="card.Status === '整備中'">
-                  <button class="btn btn-sm btn-success" :disabled="savingCardNo === card.CardNo" @click="directChangeStatus(card, '返却済')">完了</button>
-                </div>
-              </td>
-            </tr>
+            <template v-for="card in filteredCards" :key="card.CardNo">
+              <tr>
+                <td class="text-center">
+                  <span class="cardno-chip" :style="{ backgroundColor: colorBg(card.Color) }">{{ card.CardNo }}</span>
+                </td>
+                <td>
+                  <button class="btn btn-link p-0 text-start fw-bold" @click="openCardMap(card)">
+                    {{ card.TownName || card.Area }}
+                  </button>
+                  <div class="small text-muted">{{ card.Area }}（{{ card.Childs ?? 0 }}枚）</div>
+                </td>
+                <td class="text-center">
+                  <button
+                    class="btn btn-sm rounded-pill"
+                    :style="statusPillStyle(card.Status)"
+                    :disabled="!canEdit || savingCardNo === card.CardNo"
+                    @click="openEditModal(card)"
+                  >
+                    {{ card.Status }}
+                  </button>
+                </td>
+                <td class="text-center">{{ card.Childs ?? 0 }}</td>
+                <td>
+                  <div class="small">{{ card.Group || "-" }}</div>
+                  <div class="small text-muted">責:{{ card.ArrengerName || card.Arrenger || "-" }}</div>
+                </td>
+                <td>
+                  <div class="small">開始:{{ formatTerm(card.Term) }} ／ 貸出:{{ card.CheckoutDate || "-" }}</div>
+                  <div v-if="card.Status === '貸出中'" class="small" :class="{ 'text-danger fw-bold': isOverdue(card) }">
+                    使用期限:{{ card.LimitDate || "-" }}
+                  </div>
+                  <div v-else-if="card.Status === '返却済'" class="small" :class="{ 'text-danger fw-bold': card.Renew == 1 }">
+                    次回使用可能日:{{ card.NextAvailableDate || "-" }}<span v-if="card.Renew == 1">※休眠期間不足</span>
+                  </div>
+                </td>
+                <td class="small">{{ card.Description }}</td>
+                <td class="text-center">
+                  <button class="btn btn-link btn-sm p-0" @click="toggleHistory(card)">
+                    履歴{{ expandedCardNo === card.CardNo ? "▲" : "▼" }}
+                  </button>
+                </td>
+                <td v-if="canEdit" class="text-center">
+                  <div v-if="card.Status === '返却済'" class="d-flex flex-column gap-1">
+                    <button class="btn btn-sm btn-warning" :disabled="savingCardNo === card.CardNo" @click="openCheckoutModal(card)">貸出</button>
+                    <button class="btn btn-sm btn-secondary" :disabled="savingCardNo === card.CardNo" @click="directChangeStatus(card, '整備中')">整備</button>
+                  </div>
+                  <div v-else-if="card.Status === '貸出中'">
+                    <button class="btn btn-sm btn-info text-white" :disabled="savingCardNo === card.CardNo" @click="openReturnModal(card)">返却</button>
+                  </div>
+                  <div v-else-if="card.Status === '整備中'">
+                    <button class="btn btn-sm btn-success" :disabled="savingCardNo === card.CardNo" @click="directChangeStatus(card, '返却済')">完了</button>
+                  </div>
+                </td>
+              </tr>
+              <tr v-if="expandedCardNo === card.CardNo">
+                <td :colspan="canEdit ? 8 : 7" class="bg-light">
+                  <div v-if="historyLoading === card.CardNo" class="text-center text-muted py-2">
+                    <i class="fas fa-spinner fa-spin"></i> 履歴を読み込み中...
+                  </div>
+                  <table v-else class="table table-sm mb-0">
+                    <thead>
+                      <tr>
+                        <th>開始年月</th><th>ステータス</th><th>Gr</th><th>責任者</th><th>貸出日</th><th>返却日</th><th>メモ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="h in (historyCache[card.CardNo] || [])" :key="h.ID">
+                        <td>{{ formatTerm(h.Term) }}</td>
+                        <td>{{ h.Status }}</td>
+                        <td>{{ h.Group }}</td>
+                        <td>{{ h.ArrengerName }}</td>
+                        <td>{{ h.CheckoutDate || "-" }}</td>
+                        <td>{{ h.ReturnDate || "-" }}</td>
+                        <td>{{ h.Description }}</td>
+                      </tr>
+                      <tr v-if="(historyCache[card.CardNo] || []).length === 0">
+                        <td colspan="7" class="text-center text-muted">使用記録がありません</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </td>
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>
@@ -190,7 +226,7 @@
               </button>
             </div>
 
-            <p class="mb-1 small text-muted">{{ card.Area }}／{{ card.Childs ?? 0 }}枚／{{ card.Group || "-" }}／責:{{ card.Arrenger || "-" }}</p>
+            <p class="mb-1 small text-muted">{{ card.Area }}／{{ card.Childs ?? 0 }}枚／{{ card.Group || "-" }}／責:{{ card.ArrengerName || card.Arrenger || "-" }}</p>
 
             <p v-if="card.Description" class="mb-1 small">{{ card.Description }}</p>
 
@@ -215,6 +251,25 @@
               <template v-else-if="card.Status === '整備中'">
                 <button class="btn btn-sm btn-success" :disabled="savingCardNo === card.CardNo" @click="directChangeStatus(card, '返却済')">完了</button>
               </template>
+            </div>
+
+            <div class="mt-2">
+              <button class="btn btn-link btn-sm p-0" @click="toggleHistory(card)">
+                履歴{{ expandedCardNo === card.CardNo ? "▲" : "▼" }}
+              </button>
+              <div v-if="expandedCardNo === card.CardNo" class="mt-1 border-top pt-2">
+                <div v-if="historyLoading === card.CardNo" class="text-center text-muted small py-1">
+                  <i class="fas fa-spinner fa-spin"></i> 読み込み中...
+                </div>
+                <template v-else>
+                  <div v-if="(historyCache[card.CardNo] || []).length === 0" class="small text-muted">使用記録がありません</div>
+                  <div v-for="h in (historyCache[card.CardNo] || [])" :key="h.ID" class="small border-bottom py-1">
+                    {{ formatTerm(h.Term) }}／{{ h.Status }}／{{ h.Group }}／責:{{ h.ArrengerName }}<br />
+                    貸出:{{ h.CheckoutDate || "-" }} ／ 返却:{{ h.ReturnDate || "-" }}
+                    <span v-if="h.Description">／{{ h.Description }}</span>
+                  </div>
+                </template>
+              </div>
             </div>
           </div>
         </div>
@@ -242,7 +297,7 @@
 import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/store/authStore.js";
-import { getCardList, getGroupMaster, getUserMaster, upsertCardList } from "@/services/api.js";
+import { getCardList, getGroupMaster, getUserMaster, upsertCardList, getCardUsageHistory } from "@/services/api.js";
 import CardEditModal from "@/components/CardEditModal.vue";
 
 // 区域リスト画面へのメニュー表示（MainMenuView.vue）と同じ閾値。
@@ -270,6 +325,11 @@ const showModal     = ref(false);
 const modalCard     = ref(null);
 const modalMode     = ref("fix"); // 'checkout' | 'return' | 'fix'
 const savingCardNo  = ref(null);
+
+// 貸出履歴アコーディオン（一度に1件のみ展開。オリジナル版のbootstrapアコーディオンと同じ挙動）
+const expandedCardNo = ref(null);
+const historyCache   = ref({});
+const historyLoading = ref(null);
 
 const colorOptions = ["赤", "白", "黄", "青", "緑", "★"];
 
@@ -384,6 +444,29 @@ function applyUpdatedCard(updated) {
 
 function onSaved(updatedCard) {
   applyUpdatedCard(updatedCard);
+  // ステータスが変わると履歴も変わるため、キャッシュを破棄して再表示時に取り直す
+  if (updatedCard?.CardNo != null) delete historyCache.value[updatedCard.CardNo];
+}
+
+// 貸出履歴アコーディオンの開閉（一度に1件のみ展開）
+async function toggleHistory(card) {
+  if (expandedCardNo.value === card.CardNo) {
+    expandedCardNo.value = null;
+    return;
+  }
+  expandedCardNo.value = card.CardNo;
+  if (historyCache.value[card.CardNo]) return;
+
+  historyLoading.value = card.CardNo;
+  try {
+    const res = await getCardUsageHistory(card.CardNo);
+    historyCache.value[card.CardNo] = res.status === "success" ? res.history : [];
+  } catch (e) {
+    console.error(e);
+    historyCache.value[card.CardNo] = [];
+  } finally {
+    historyLoading.value = null;
+  }
 }
 
 // 整備／完了のようにモーダルを介さない直接ステータス変更（ORIGINAL/CardList.html changeCardStatus を移植）

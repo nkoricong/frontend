@@ -152,6 +152,16 @@ export async function getCardNoOptions() {
   return callWorker({ funcName: "getCardNoOptions" });
 }
 
+/** 区域カードの貸出履歴一覧を取得する */
+export async function getCardUsageHistory(cardNo) {
+  return callWorker({ funcName: "getCardUsageHistory", CardNo: cardNo });
+}
+
+/** 貸出を取り消す（直近の貸出履歴を削除し、前回の状態に復元する） */
+export async function cancelCardCheckout(cardNo) {
+  return callWorker({ funcName: "cancelCardCheckout", CardNo: cardNo });
+}
+
 // ----------------------------------------------------------------
 // 子カード一覧（CardMap / ChildList / EditChildList）
 // ----------------------------------------------------------------

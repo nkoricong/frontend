@@ -129,6 +129,14 @@
             貸出中に戻す
           </button>
           <button
+            v-if="mode === 'fix' && card?.Status === '貸出中'"
+            class="btn btn-outline-danger"
+            @click="cancelCheckout"
+            :disabled="saving"
+          >
+            貸出を取り消す
+          </button>
+          <button
             v-if="mode === 'checkout' || mode === 'return' || (mode === 'fix' && card?.Status !== '整備中')"
             class="btn btn-primary"
             @click="submit('save')"
@@ -148,7 +156,7 @@
 
 <script setup>
 import { ref, computed, watch } from "vue";
-import { upsertCardList } from "@/services/api.js";
+import { upsertCardList, cancelCardCheckout } from "@/services/api.js";
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -274,6 +282,28 @@ async function submit(action) {
       emit("update:modelValue", false);
     } else {
       saveError.value = res.message || "保存に失敗しました";
+    }
+  } catch (e) {
+    saveError.value = e.message;
+  } finally {
+    saving.value = false;
+  }
+}
+
+// 「削除-貸出取消」：直近の貸出履歴を削除し、前回の状態（通常は返却済）に復元する
+async function cancelCheckout() {
+  if (!props.card) return;
+  if (!confirm("取消を実行してもよろしいですか？")) return;
+
+  saving.value    = true;
+  saveError.value = "";
+  try {
+    const res = await cancelCardCheckout(props.card.CardNo);
+    if (res.status === "success") {
+      emit("saved", res.card);
+      emit("update:modelValue", false);
+    } else {
+      saveError.value = res.message || "取消に失敗しました";
     }
   } catch (e) {
     saveError.value = e.message;
