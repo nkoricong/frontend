@@ -49,14 +49,16 @@ export function createMap(container, center, zoom = 16) {
 }
 
 /**
- * AdvancedMarkerElement を生成して地図に追加する
+ * マーカーを生成して地図に追加する。
+ * AdvancedMarkerElement は Map ID が無いと警告が出る／環境によって
+ * 描画が不安定になるため、Map ID 不要な classic Marker を使用する。
  * @param {google.maps.Map} map
  * @param {{ lat: number, lng: number }} position
  * @param {string} title
- * @returns {google.maps.marker.AdvancedMarkerElement}
+ * @returns {google.maps.Marker}
  */
 export function addMarker(map, position, title = "") {
-  return new google.maps.marker.AdvancedMarkerElement({ map, position, title });
+  return new google.maps.Marker({ map, position, title });
 }
 
 /**
