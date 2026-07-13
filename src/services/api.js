@@ -58,6 +58,16 @@ export async function getFirebaseConfig() {
   return callWorkerPublic({ funcName: "getFirebaseConfig" });
 }
 
+/** パスキーログイン用の認証オプションを取得する（未ログイン状態で呼ぶため認証不要） */
+export async function getWebauthnAuthenticationOptions(email) {
+  return callWorkerPublic({ funcName: "getWebauthnAuthenticationOptions", email });
+}
+
+/** パスキー認証レスポンスを検証する（成功時にFirebaseカスタムトークンを受け取る） */
+export async function verifyWebauthnAuthentication(email, credential) {
+  return callWorkerPublic({ funcName: "verifyWebauthnAuthentication", email, credential });
+}
+
 // ----------------------------------------------------------------
 // 認証付き API
 // ----------------------------------------------------------------
@@ -70,6 +80,16 @@ export async function getLoginUserInformation() {
 /** Google Maps URL を取得する */
 export async function getGoogleMapsUrl() {
   return callWorker({ funcName: "getGoogleMapsUrl" });
+}
+
+/** ログイン中のユーザーが新しいパスキーを登録するためのオプションを取得する */
+export async function getWebauthnRegistrationOptions() {
+  return callWorker({ funcName: "getWebauthnRegistrationOptions" });
+}
+
+/** パスキー登録レスポンスを検証し、アカウントに紐づけて保存する */
+export async function verifyWebauthnRegistration(credential) {
+  return callWorker({ funcName: "verifyWebauthnRegistration", credential });
 }
 
 /**

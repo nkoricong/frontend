@@ -25,6 +25,15 @@
         </div>
       </div>
 
+      <div class="text-end mt-1">
+        <button class="btn btn-sm btn-outline-secondary" @click="registerPasskey" :disabled="registeringPasskey">
+          <i class="fas fa-fingerprint"></i>
+          <span v-if="registeringPasskey">登録中...</span>
+          <span v-else>このデバイスにパスキーを登録</span>
+        </button>
+        <p v-if="passkeyMsg" class="small mt-1" :class="passkeyError ? 'text-danger' : 'text-success'">{{ passkeyMsg }}</p>
+      </div>
+
       <br />
 
       <!-- タイトル -->
@@ -104,15 +113,48 @@
 <script setup>
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
+import { startRegistration } from "@simplewebauthn/browser";
 import { useAuthStore } from "@/store/authStore.js";
+import { getWebauthnRegistrationOptions, verifyWebauthnRegistration } from "@/services/api.js";
 
 const router    = useRouter();
 const authStore = useAuthStore();
 const loading   = ref(false);
 
+const registeringPasskey = ref(false);
+const passkeyMsg         = ref("");
+const passkeyError       = ref(false);
+
 async function logout() {
   await authStore.logout();
   router.push({ name: "login" });
+}
+
+// このデバイス（生体認証・セキュリティキー等）をログイン中のアカウントにパスキーとして登録する
+async function registerPasskey() {
+  passkeyMsg.value   = "";
+  passkeyError.value = false;
+  registeringPasskey.value = true;
+  try {
+    const optionsRes = await getWebauthnRegistrationOptions();
+    if (optionsRes.status !== "success") {
+      throw new Error(optionsRes.message || "パスキー登録の準備に失敗しました");
+    }
+
+    const credential = await startRegistration({ optionsJSON: optionsRes.options });
+
+    const verifyRes = await verifyWebauthnRegistration(credential);
+    if (verifyRes.status !== "success") {
+      throw new Error(verifyRes.message || "パスキーの登録に失敗しました");
+    }
+
+    passkeyMsg.value = "パスキーを登録しました。次回からパスキーでログインできます。";
+  } catch (e) {
+    passkeyError.value = true;
+    passkeyMsg.value   = e.name === "NotAllowedError" ? "パスキーの登録がキャンセルされました" : e.message;
+  } finally {
+    registeringPasskey.value = false;
+  }
 }
 
 const PAGE_ROUTES = {

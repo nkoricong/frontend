@@ -6,8 +6,8 @@ import {
   getAuth,
   signInWithEmailAndPassword,
   signInWithPopup,
+  signInWithCustomToken,
   GoogleAuthProvider,
-  OAuthProvider,
   signOut,
   onAuthStateChanged,
 } from "firebase/auth";
@@ -40,16 +40,9 @@ export async function loginWithGoogle() {
   return signInWithPopup(auth, new GoogleAuthProvider());
 }
 
-/** Apple ログイン */
-export async function loginWithApple() {
-  const provider = new OAuthProvider("apple.com");
-  return signInWithPopup(auth, provider);
-}
-
-/** Microsoft ログイン */
-export async function loginWithMicrosoft() {
-  const provider = new OAuthProvider("microsoft.com");
-  return signInWithPopup(auth, provider);
+/** パスキー認証成功後に発行された Firebase カスタムトークンでログインする */
+export async function loginWithCustomToken(token) {
+  return signInWithCustomToken(auth, token);
 }
 
 /** ログアウト */

@@ -31,22 +31,17 @@
         入力されたメールアドレスでログイン
       </button>
 
+      <button class="oauth-btn" id="passkeyBtn" @click="loginPasskey" :disabled="loading">
+        <i class="fas fa-fingerprint"></i>
+        パスキーでログイン
+      </button>
+
       <hr />
 
       <!-- OAuth -->
       <button class="oauth-btn" id="googleBtn" @click="loginGoogle" :disabled="loading">
         <img src="https://www.google.com/favicon.ico" width="18" alt="Google" />
         Googleアカウントでログイン
-      </button>
-
-      <button class="oauth-btn" id="appleBtn" @click="loginApple" :disabled="loading">
-        <i class="fab fa-apple"></i>
-        Appleアカウントでログイン
-      </button>
-
-      <button class="oauth-btn" id="msBtn" @click="loginMicrosoft" :disabled="loading">
-        <i class="fab fa-microsoft" style="color:#00a4ef"></i>
-        Microsoftアカウントでログイン
       </button>
     </section>
 
@@ -57,14 +52,18 @@
 <script setup>
 import { ref } from "vue";
 import { useRouter } from "vue-router";
+import { startAuthentication } from "@simplewebauthn/browser";
 import { useAuthStore } from "@/store/authStore.js";
 import {
   loginWithEmail,
   loginWithGoogle,
-  loginWithApple,
-  loginWithMicrosoft,
+  loginWithCustomToken,
 } from "@/services/auth.js";
-import { getLoginUserInformation } from "@/services/api.js";
+import {
+  getLoginUserInformation,
+  getWebauthnAuthenticationOptions,
+  verifyWebauthnAuthentication,
+} from "@/services/api.js";
 
 const router    = useRouter();
 const authStore = useAuthStore();
@@ -120,27 +119,34 @@ async function loginGoogle() {
   }
 }
 
-async function loginApple() {
+async function loginPasskey() {
   errorMsg.value = "";
-  loading.value  = true;
-  try {
-    await loginWithApple();
-    await afterLogin();
-  } catch (e) {
-    errorMsg.value = e.message;
-    loading.value  = false;
+  if (!email.value) {
+    errorMsg.value = "パスキーでログインするには、まずメールアドレスを入力してください";
+    return;
   }
-}
 
-async function loginMicrosoft() {
-  errorMsg.value = "";
-  loading.value  = true;
+  loading.value   = true;
+  statusMsg.value = "パスキーを確認しています...";
   try {
-    await loginWithMicrosoft();
+    const optionsRes = await getWebauthnAuthenticationOptions(email.value);
+    if (optionsRes.status !== "success") {
+      throw new Error(optionsRes.message || "パスキーの取得に失敗しました");
+    }
+
+    const credential = await startAuthentication({ optionsJSON: optionsRes.options });
+
+    const verifyRes = await verifyWebauthnAuthentication(email.value, credential);
+    if (verifyRes.status !== "success") {
+      throw new Error(verifyRes.message || "パスキーの検証に失敗しました");
+    }
+
+    await loginWithCustomToken(verifyRes.token);
     await afterLogin();
   } catch (e) {
-    errorMsg.value = e.message;
-    loading.value  = false;
+    errorMsg.value  = e.name === "NotAllowedError" ? "パスキーの操作がキャンセルされました" : e.message;
+    statusMsg.value = "";
+    loading.value   = false;
   }
 }
 </script>
