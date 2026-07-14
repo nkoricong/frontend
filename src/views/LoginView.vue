@@ -63,11 +63,33 @@
 
       <!-- ユーザー選択（パスキー・ID/パスワードの両方で共通） -->
       <div v-if="authMethod === 'passkey' || authMethod === 'password'">
-        <label class="field-label" for="userSelect">ユーザーを選択</label>
-        <select id="userSelect" v-model="selectedUserId">
-          <option :value="null" disabled>選択してください</option>
-          <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}（{{ u.maskedEmail }}）</option>
-        </select>
+        <label class="field-label">頭文字の行を選択</label>
+        <div class="gyou-row">
+          <button
+            v-for="g in gyouList"
+            :key="g"
+            type="button"
+            class="gyou-btn"
+            :class="{ active: selectedGyou === g }"
+            @click="selectGyou(g)"
+          >{{ g }}</button>
+        </div>
+
+        <div v-if="selectedGyou" class="user-list">
+          <button
+            v-for="u in filteredUsers"
+            :key="u.id"
+            type="button"
+            class="user-item"
+            :class="{ active: selectedUserId === u.id }"
+            @click="selectedUserId = u.id"
+          >
+            <span class="user-name">{{ u.name }}</span>
+            <span class="user-email">{{ u.maskedEmail }}</span>
+          </button>
+          <p v-if="filteredUsers.length === 0" class="hint">この行に該当するユーザーがいません</p>
+        </div>
+        <p v-else class="hint">行を選ぶとユーザーの一覧が表示されます</p>
       </div>
 
       <!-- パスキー -->
@@ -140,7 +162,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
 import { useAuthStore } from "@/store/authStore.js";
@@ -175,6 +197,36 @@ const checkingCode = ref(false);
 const authMethod    = ref("passkey");
 const users          = ref([]);
 const selectedUserId = ref(null);
+
+// 氏名かな（UserKana、ローマ字表記）の頭文字から五十音の行へ振り分ける
+const GYOU_LIST = ["あ", "か", "さ", "た", "な", "は", "ま", "や", "ら", "わ"];
+const gyouList     = GYOU_LIST;
+const selectedGyou = ref("");
+
+function firstLetterToGyou(kana) {
+  const c = String(kana || "").charAt(0).toUpperCase();
+  if ("AIUEO".includes(c)) return "あ";
+  if ("KG".includes(c))    return "か";
+  if ("SZJ".includes(c))   return "さ";
+  if ("TDC".includes(c))   return "た";
+  if (c === "N")           return "な";
+  if ("HBPF".includes(c))  return "は";
+  if (c === "M")           return "ま";
+  if (c === "Y")           return "や";
+  if (c === "R")           return "ら";
+  if (c === "W")           return "わ";
+  return "";
+}
+
+const filteredUsers = computed(() => {
+  if (!selectedGyou.value) return [];
+  return users.value.filter(u => firstLetterToGyou(u.kana) === selectedGyou.value);
+});
+
+function selectGyou(g) {
+  selectedGyou.value = selectedGyou.value === g ? "" : g;
+  selectedUserId.value = null;
+}
 
 const password     = ref("");
 const showPassword = ref(false);
@@ -215,6 +267,8 @@ async function submitAccessCode() {
 function selectMethod(method) {
   authMethod.value = method;
   errorMsg.value   = "";
+  selectedGyou.value   = "";
+  selectedUserId.value  = null;
 }
 
 async function fetchUserOptions() {
@@ -459,6 +513,62 @@ select {
   border: 1px solid #d1d5db;
   box-sizing: border-box;
   background: #fff;
+}
+
+.gyou-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.gyou-btn {
+  width: auto;
+  margin-top: 0;
+  padding: 10px 0;
+  font-size: 16px;
+  font-weight: 500;
+  background: #fff;
+  color: #0b1220;
+  border: 1px solid #d1d5db;
+}
+
+.gyou-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.user-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.user-item {
+  width: auto;
+  margin-top: 0;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  background: #fff;
+  color: #0b1220;
+  border: 1px solid #d1d5db;
+  text-align: left;
+  font-size: 14px;
+}
+
+.user-item .user-name { font-weight: 600; }
+
+.user-item .user-email { font-size: 12px; color: var(--muted); }
+
+.user-item.active {
+  background: #e8f0fe;
+  border-color: var(--accent);
 }
 
 input {
