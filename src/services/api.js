@@ -58,14 +58,19 @@ export async function getFirebaseConfig() {
   return callWorkerPublic({ funcName: "getFirebaseConfig" });
 }
 
+/** ログイン画面のアクセスコードを照合する */
+export async function verifySiteAccessCode(code) {
+  return callWorkerPublic({ funcName: "verifySiteAccessCode", code });
+}
+
 /** ログイン画面のユーザー選択ドロップダウン用一覧を取得する（実メールは含まない） */
-export async function getLoginUserOptions() {
-  return callWorkerPublic({ funcName: "getLoginUserOptions" });
+export async function getLoginUserOptions(accessCode) {
+  return callWorkerPublic({ funcName: "getLoginUserOptions", accessCode });
 }
 
 /** 選択されたユーザーIDから実際のメールアドレスを1件だけ解決する */
-export async function resolveLoginEmail(userId) {
-  return callWorkerPublic({ funcName: "resolveLoginEmail", userId });
+export async function resolveLoginEmail(userId, accessCode) {
+  return callWorkerPublic({ funcName: "resolveLoginEmail", userId, accessCode });
 }
 
 /** パスキーログイン用の認証オプションを取得する（未ログイン状態で呼ぶため認証不要） */
@@ -254,6 +259,16 @@ export async function upsertUser(record) {
 /** ユーザーを削除する */
 export async function deleteUser(id) {
   return callWorker({ funcName: "deleteUser", ID: id });
+}
+
+/** ログイン画面のアクセスコード現在値を取得する（管理者のみ） */
+export async function getSiteAccessCode() {
+  return callWorker({ funcName: "getSiteAccessCode" });
+}
+
+/** ログイン画面のアクセスコードを変更する（管理者のみ） */
+export async function updateSiteAccessCode(code) {
+  return callWorker({ funcName: "updateSiteAccessCode", code });
 }
 
 // ----------------------------------------------------------------

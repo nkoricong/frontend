@@ -7,7 +7,25 @@
       </div>
     </header>
 
-    <section class="card" id="mainCard">
+    <!-- アクセスコード確認（未確認の間はログイン操作を一切表示しない） -->
+    <section v-if="!unlocked" class="card" id="gateCard">
+      <p>アクセスコードを入力してください</p>
+      <p class="error-msg">{{ gateError }}</p>
+      <label class="field-label" for="accessCode">アクセスコード</label>
+      <input
+        type="text"
+        id="accessCode"
+        v-model="accessCode"
+        inputmode="numeric"
+        placeholder="半角数字"
+        @keyup.enter="submitAccessCode"
+      />
+      <button @click="submitAccessCode" :disabled="checkingCode">
+        {{ checkingCode ? "確認中..." : "確認する" }}
+      </button>
+    </section>
+
+    <section v-else class="card" id="mainCard">
       <p>認証方法を選んでください</p>
       <p class="status-msg">{{ statusMsg }}</p>
       <p class="error-msg">{{ errorMsg }}</p>
@@ -133,6 +151,7 @@ import {
 } from "@/services/auth.js";
 import {
   getLoginUserInformation,
+  verifySiteAccessCode,
   getLoginUserOptions,
   resolveLoginEmail,
   getWebauthnAuthenticationOptions,
@@ -141,10 +160,17 @@ import {
   verifyWebauthnRegistration,
 } from "@/services/api.js";
 
-const HAS_PASSKEY_KEY = "ekuiki_has_passkey";
+const HAS_PASSKEY_KEY   = "ekuiki_has_passkey";
+const GATE_UNLOCKED_KEY = "ekuiki_gate_unlocked";
 
 const router    = useRouter();
 const authStore = useAuthStore();
+
+const storedCode   = sessionStorage.getItem(GATE_UNLOCKED_KEY) || "";
+const unlocked     = ref(!!storedCode);
+const accessCode   = ref(storedCode);
+const gateError    = ref("");
+const checkingCode = ref(false);
 
 const authMethod    = ref("passkey");
 const users          = ref([]);
@@ -163,6 +189,29 @@ const registerPassword   = ref("");
 const registerError      = ref("");
 const registering        = ref(false);
 
+async function submitAccessCode() {
+  gateError.value = "";
+  if (!accessCode.value) {
+    gateError.value = "アクセスコードを入力してください";
+    return;
+  }
+  checkingCode.value = true;
+  try {
+    const res = await verifySiteAccessCode(accessCode.value);
+    if (res.status !== "success") {
+      gateError.value = res.message || "コードが一致しません";
+      return;
+    }
+    sessionStorage.setItem(GATE_UNLOCKED_KEY, accessCode.value);
+    unlocked.value = true;
+    await fetchUserOptions();
+  } catch (e) {
+    gateError.value = e.message;
+  } finally {
+    checkingCode.value = false;
+  }
+}
+
 function selectMethod(method) {
   authMethod.value = method;
   errorMsg.value   = "";
@@ -170,7 +219,7 @@ function selectMethod(method) {
 
 async function fetchUserOptions() {
   try {
-    const res = await getLoginUserOptions();
+    const res = await getLoginUserOptions(accessCode.value);
     if (res.status === "success") users.value = res.users || [];
   } catch (e) {
     console.error(e);
@@ -178,7 +227,7 @@ async function fetchUserOptions() {
 }
 
 async function resolveSelectedEmail() {
-  const res = await resolveLoginEmail(selectedUserId.value);
+  const res = await resolveLoginEmail(selectedUserId.value, accessCode.value);
   if (res.status !== "success") throw new Error(res.message || "メールアドレスの解決に失敗しました");
   return res.email;
 }
@@ -329,7 +378,9 @@ async function submitRegisterPasskey() {
   }
 }
 
-onMounted(fetchUserOptions);
+onMounted(() => {
+  if (unlocked.value) fetchUserOptions();
+});
 </script>
 
 <style scoped>

@@ -90,6 +90,11 @@ const routes = [
     name:      "editUserList",
     component: () => import("@/views/EditUserListView.vue"),
   },
+  {
+    path:      "/admin/site-settings",
+    name:      "siteSettings",
+    component: () => import("@/views/SiteSettingsView.vue"),
+  },
 ];
 
 const router = createRouter({
