@@ -58,6 +58,16 @@ export async function getFirebaseConfig() {
   return callWorkerPublic({ funcName: "getFirebaseConfig" });
 }
 
+/** ログイン画面のユーザー選択ドロップダウン用一覧を取得する（実メールは含まない） */
+export async function getLoginUserOptions() {
+  return callWorkerPublic({ funcName: "getLoginUserOptions" });
+}
+
+/** 選択されたユーザーIDから実際のメールアドレスを1件だけ解決する */
+export async function resolveLoginEmail(userId) {
+  return callWorkerPublic({ funcName: "resolveLoginEmail", userId });
+}
+
 /** パスキーログイン用の認証オプションを取得する（未ログイン状態で呼ぶため認証不要） */
 export async function getWebauthnAuthenticationOptions(email) {
   return callWorkerPublic({ funcName: "getWebauthnAuthenticationOptions", email });
