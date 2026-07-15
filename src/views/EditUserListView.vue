@@ -207,6 +207,40 @@
               <small class="text-muted">チェックを入れたメールアドレスのいずれかが、Firebaseログインのメールアドレスと一致するユーザーがログインできます。</small>
             </div>
 
+            <!-- パスワードリセット（Firebase Authentication） -->
+            <template v-if="!isNew">
+              <div class="col-12"><hr /></div>
+              <div class="col-12">
+                <label class="form-label small">パスワードリセット／初期パスワード設定（Firebase Authentication）</label>
+                <div class="row g-2">
+                  <div class="col-12 col-sm-5">
+                    <select class="form-select form-select-sm" v-model="resetTargetEmail">
+                      <option value="">対象のメールアドレスを選択</option>
+                      <option v-for="opt in resetEmailOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                    </select>
+                  </div>
+                  <div class="col-8 col-sm-4">
+                    <input
+                      type="text"
+                      class="form-control form-control-sm"
+                      v-model="resetNewPassword"
+                      placeholder="新しいパスワード（6文字以上）"
+                    />
+                  </div>
+                  <div class="col-4 col-sm-3">
+                    <button
+                      class="btn btn-sm btn-outline-warning w-100"
+                      @click="handleResetPassword"
+                      :disabled="resettingPassword"
+                    >
+                      {{ resettingPassword ? "処理中..." : "リセット" }}
+                    </button>
+                  </div>
+                </div>
+                <p v-if="resetMessage" class="small mt-1" :class="resetError ? 'text-danger' : 'text-success'">{{ resetMessage }}</p>
+              </div>
+            </template>
+
           </div>
 
           <p v-if="saveError" class="text-danger mt-2 small">{{ saveError }}</p>
@@ -231,7 +265,7 @@
 import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/store/authStore.js";
-import { getUserMasterList, upsertUser, deleteUser } from "@/services/api.js";
+import { getUserMasterList, upsertUser, deleteUser, resetFirebaseUserPassword } from "@/services/api.js";
 
 const router    = useRouter();
 const authStore = useAuthStore();
@@ -325,13 +359,72 @@ function openCreateModal() {
   isNew.value     = true;
   form.value      = blankForm();
   saveError.value = "";
+  resetPasswordFormState();
   showModal.value = true;
+}
+
+// ---- パスワードリセット（Firebase Authentication） ----
+const resetTargetEmail  = ref("");
+const resetNewPassword  = ref("");
+const resettingPassword = ref(false);
+const resetMessage      = ref("");
+const resetError        = ref(false);
+
+const resetEmailOptions = computed(() => {
+  const opts = [];
+  if (form.value.UserID) opts.push({ value: form.value.UserID, label: `UserID: ${form.value.UserID}` });
+  if (form.value.Mail1)  opts.push({ value: form.value.Mail1,  label: `メール1: ${form.value.Mail1}` });
+  if (form.value.Mail2)  opts.push({ value: form.value.Mail2,  label: `メール2: ${form.value.Mail2}` });
+  if (form.value.Mail3)  opts.push({ value: form.value.Mail3,  label: `メール3: ${form.value.Mail3}` });
+  return opts;
+});
+
+function resetPasswordFormState() {
+  resetTargetEmail.value  = "";
+  resetNewPassword.value  = "";
+  resetMessage.value      = "";
+  resetError.value        = false;
+}
+
+async function handleResetPassword() {
+  resetMessage.value = "";
+  resetError.value   = false;
+
+  if (!resetTargetEmail.value) {
+    resetMessage.value = "対象のメールアドレスを選択してください";
+    resetError.value   = true;
+    return;
+  }
+  if (!resetNewPassword.value || resetNewPassword.value.length < 6) {
+    resetMessage.value = "パスワードは6文字以上で入力してください";
+    resetError.value   = true;
+    return;
+  }
+
+  resettingPassword.value = true;
+  try {
+    const res = await resetFirebaseUserPassword(resetTargetEmail.value, resetNewPassword.value);
+    if (res.status === "success") {
+      resetMessage.value     = "パスワードをリセットしました";
+      resetError.value       = false;
+      resetNewPassword.value = "";
+    } else {
+      resetMessage.value = res.message || "リセットに失敗しました";
+      resetError.value   = true;
+    }
+  } catch (e) {
+    resetMessage.value = e.message;
+    resetError.value   = true;
+  } finally {
+    resettingPassword.value = false;
+  }
 }
 
 function openEditModal(user) {
   isNew.value     = false;
   form.value      = { ...blankForm(), ...user };
   saveError.value = "";
+  resetPasswordFormState();
   showModal.value = true;
 }
 

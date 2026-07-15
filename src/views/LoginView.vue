@@ -86,7 +86,7 @@
             @click="selectUser(u)"
           >
             <span class="user-name">{{ u.name }}</span>
-            <span class="user-email">{{ u.maskedEmail }}</span>
+            <span class="user-email">{{ u.email }}</span>
           </button>
           <p v-if="filteredUsers.length === 0" class="hint">この行に該当するユーザーがいません</p>
         </div>
@@ -170,6 +170,7 @@ import { useAuthStore } from "@/store/authStore.js";
 import {
   loginWithEmail,
   loginWithGoogle,
+  getGoogleRedirectResult,
   loginWithCustomToken,
 } from "@/services/auth.js";
 import {
@@ -369,8 +370,9 @@ async function loginGoogle() {
   errorMsg.value = "";
   loading.value  = true;
   try {
+    // signInWithRedirect はページ遷移するため、以降の処理は
+    // 戻ってきた後に onMounted 側の getGoogleRedirectResult() が引き継ぐ
     await loginWithGoogle();
-    await afterLogin();
   } catch (e) {
     errorMsg.value = e.message;
     loading.value  = false;
@@ -469,8 +471,19 @@ async function submitRegisterPasskey() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   if (unlocked.value) fetchUserOptions();
+
+  // Google連携（signInWithRedirect）から戻ってきた場合、結果を受け取ってログインを完了させる
+  try {
+    const result = await getGoogleRedirectResult();
+    if (result) {
+      loading.value = true;
+      await afterLogin();
+    }
+  } catch (e) {
+    errorMsg.value = e.message;
+  }
 });
 </script>
 

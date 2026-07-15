@@ -13,14 +13,10 @@
         <div class="text-center flex-grow-1">
           <p class="mb-0">[ユーザー名]<br />{{ authStore.userName }}<br />({{ authStore.userGroup }})</p>
         </div>
-        <div class="d-flex">
-          <button class="btn btn-link p-0 text-center me-2" @click="router.push({ name: 'mainMenu' })">
+        <div>
+          <button class="btn btn-link p-0 text-center" @click="router.push({ name: 'mainMenu' })">
             <i class="fas fa-home fa-2x"></i>
             <div class="small">ホーム</div>
-          </button>
-          <button class="btn btn-link p-0 text-center text-danger" @click="logout">
-            <i class="fas fa-door-open fa-2x"></i>
-            <div class="small">終了</div>
           </button>
         </div>
       </div>
@@ -58,9 +54,4 @@ import { useAuthStore } from "@/store/authStore.js";
 
 const router    = useRouter();
 const authStore = useAuthStore();
-
-async function logout() {
-  await authStore.logout();
-  router.push({ name: "login" });
-}
 </script>

@@ -145,14 +145,23 @@
                 <span class="cardno-badge">{{ child.CARDNO }}-{{ child.CHILDNO }}</span>
                 {{ child.CHILDBLOCK }}
               </h5>
-              <span
-                class="badge rounded-pill"
-                :class="{ 'pill-clickable': child.CHILDSTATUS === '返却済' && !child.SHARED }"
-                :style="statusPillStyle(child.CHILDSTATUS)"
-                @click="child.CHILDSTATUS === '返却済' && !child.SHARED && cancelReturn(child)"
-              >
-                {{ child.CHILDSTATUS }}
-              </span>
+              <div class="d-flex flex-column align-items-end gap-1">
+                <span
+                  class="badge rounded-pill"
+                  :class="{ 'pill-clickable': child.CHILDSTATUS === '返却済' && !child.SHARED }"
+                  :style="statusPillStyle(child.CHILDSTATUS)"
+                  @click="child.CHILDSTATUS === '返却済' && !child.SHARED && cancelReturn(child)"
+                >
+                  {{ child.CHILDSTATUS }}
+                </span>
+                <span
+                  v-if="isOfflineChild(child)"
+                  class="badge rounded-pill offline-pill pill-clickable"
+                  @click="openOfflineDialog(child)"
+                >
+                  <i class="fas fa-plane"></i> オフライン中
+                </span>
+              </div>
             </div>
 
             <p class="mb-1 small text-muted">
@@ -166,7 +175,7 @@
                 貸出: {{ child.CHILDCHECKOUTDATE ?? "-" }} ／
                 期限: {{ child.CHILDLIMITDATE ?? "-" }}
               </small>
-              <div class="d-flex gap-2">
+              <div class="d-flex flex-wrap gap-2 justify-content-end">
                 <button
                   v-if="!child.SHARED"
                   class="btn btn-sm btn-outline-danger"
@@ -180,6 +189,13 @@
                   @click="endShare(child)"
                 >
                   <i class="fas fa-share-alt"></i> 共有終了
+                </button>
+                <button
+                  v-if="!isOfflineChild(child)"
+                  class="btn btn-sm btn-outline-secondary"
+                  @click="enableOffline(child)"
+                >
+                  <i class="fas fa-cloud-download-alt"></i> オフラインで使用
                 </button>
                 <button
                   class="btn btn-sm btn-outline-primary"
@@ -228,6 +244,16 @@
     </div>
   </div>
   <div v-if="showScanModal" class="modal-backdrop fade show"></div>
+
+  <!-- オフライン同期ダイアログ -->
+  <OfflineSyncDialog
+    v-model="showOfflineDialog"
+    :child-id="offlineDialogChild?.CHILDID"
+    :card-no="offlineDialogChild?.CARDNO"
+    :child-no="offlineDialogChild?.CHILDNO"
+    :child-block="offlineDialogChild?.CHILDBLOCK"
+    @released="handleOfflineReleased"
+  />
 </template>
 
 <script setup>
@@ -237,8 +263,10 @@ import jsQR from "jsqr";
 import { useAuthStore } from "@/store/authStore.js";
 import {
   getFilteredChildCardbyUser, returnChildCard, cancelChildReturn,
-  claimChildShare, endChildShare,
+  claimChildShare, endChildShare, getChildDetail,
 } from "@/services/api.js";
+import { isChildOffline, saveOfflineChild } from "@/services/offline.js";
+import OfflineSyncDialog from "@/components/OfflineSyncDialog.vue";
 
 const router    = useRouter();
 const route     = useRoute();
@@ -466,6 +494,44 @@ async function claimShare(token) {
   }
 }
 
+// ---- オフラインで使用 ----
+const offlineVersion    = ref(0); // isOfflineChild()の再評価をVueに気づかせるための依存
+const showOfflineDialog = ref(false);
+const offlineDialogChild = ref(null);
+
+function isOfflineChild(child) {
+  void offlineVersion.value;
+  return isChildOffline(child.CHILDID);
+}
+
+async function enableOffline(child) {
+  if (!confirm("オフラインでも区域カードを使用できるようにしますか。")) return;
+  try {
+    const res = await getChildDetail(child.CARDNO, child.CHILDNO);
+    if (res.status !== "success") {
+      alert("データの取得に失敗しました");
+      return;
+    }
+    await saveOfflineChild(child.CHILDID, child.CARDNO, child.CHILDNO, {
+      cardInfo:  res.cardInfo,
+      childInfo: res.childInfo,
+      houses:    res.houses,
+    });
+    offlineVersion.value++;
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+function openOfflineDialog(child) {
+  offlineDialogChild.value = child;
+  showOfflineDialog.value  = true;
+}
+
+function handleOfflineReleased() {
+  offlineVersion.value++;
+}
+
 // オリジナル版のBootstrap4配色をhex直指定で踏襲（区域リスト画面と同一）
 const STATUS_COLORS = {
   "貸出中": { bg: "#ffc107", color: "#212529" },
@@ -518,5 +584,11 @@ onUnmounted(() => {
 
 .pill-clickable {
   cursor: pointer;
+}
+
+.offline-pill {
+  background-color: #6f42c1;
+  color: #fff;
+  font-size: 12px;
 }
 </style>

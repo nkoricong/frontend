@@ -281,6 +281,11 @@ export async function deleteUser(id) {
   return callWorker({ funcName: "deleteUser", ID: id });
 }
 
+/** 指定したメールアドレスのFirebase Authenticationパスワードを管理者権限でリセットする */
+export async function resetFirebaseUserPassword(targetEmail, newPassword) {
+  return callWorker({ funcName: "resetFirebaseUserPassword", targetEmail, newPassword });
+}
+
 /** ログイン画面のアクセスコード現在値を取得する（管理者のみ） */
 export async function getSiteAccessCode() {
   return callWorker({ funcName: "getSiteAccessCode" });
