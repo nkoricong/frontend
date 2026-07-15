@@ -26,9 +26,9 @@
     </section>
 
     <section v-else class="card" id="mainCard">
-      <p>認証方法を選んでください</p>
-      <p class="status-msg">{{ statusMsg }}</p>
-      <p class="error-msg">{{ errorMsg }}</p>
+      <p class="section-title">認証方法を選んでください</p>
+      <p v-if="statusMsg" class="status-msg">{{ statusMsg }}</p>
+      <p v-if="errorMsg" class="error-msg">{{ errorMsg }}</p>
 
       <!-- 認証方式セレクタ -->
       <div class="method-tabs">
@@ -57,13 +57,13 @@
           @click="selectMethod('google')"
         >
           <i class="fab fa-google"></i>
-          <span>Google</span>
+          <span>Google連携</span>
         </button>
       </div>
 
       <!-- ユーザー選択（パスキー・ID/パスワードの両方で共通） -->
       <div v-if="authMethod === 'passkey' || authMethod === 'password'">
-        <label class="field-label">頭文字の行を選択</label>
+        <label class="field-label">ユーザー氏名の頭文字の行を選択</label>
         <div class="gyou-row">
           <button
             v-for="g in gyouList"
@@ -71,6 +71,7 @@
             type="button"
             class="gyou-btn"
             :class="{ active: selectedGyou === g }"
+            :disabled="!gyouHasUsers(g)"
             @click="selectGyou(g)"
           >{{ g }}</button>
         </div>
@@ -82,7 +83,7 @@
             type="button"
             class="user-item"
             :class="{ active: selectedUserId === u.id }"
-            @click="selectedUserId = u.id"
+            @click="selectUser(u)"
           >
             <span class="user-name">{{ u.name }}</span>
             <span class="user-email">{{ u.maskedEmail }}</span>
@@ -184,6 +185,9 @@ import {
 
 const HAS_PASSKEY_KEY   = "ekuiki_has_passkey";
 const GATE_UNLOCKED_KEY = "ekuiki_gate_unlocked";
+const LAST_METHOD_KEY   = "ekuiki_last_auth_method";
+const LAST_GYOU_KEY     = "ekuiki_last_gyou";
+const LAST_USER_KEY     = "ekuiki_last_user_id";
 
 const router    = useRouter();
 const authStore = useAuthStore();
@@ -194,7 +198,8 @@ const accessCode   = ref(storedCode);
 const gateError    = ref("");
 const checkingCode = ref(false);
 
-const authMethod    = ref("passkey");
+// 認証方法は端末ごとに直前の選択を記憶し、初期値として復元する
+const authMethod    = ref(localStorage.getItem(LAST_METHOD_KEY) || "passkey");
 const users          = ref([]);
 const selectedUserId = ref(null);
 
@@ -218,14 +223,42 @@ function firstLetterToGyou(kana) {
   return "";
 }
 
+function usersInGyou(g) {
+  return users.value.filter(u => firstLetterToGyou(u.kana) === g);
+}
+
+function gyouHasUsers(g) {
+  return usersInGyou(g).length > 0;
+}
+
 const filteredUsers = computed(() => {
   if (!selectedGyou.value) return [];
-  return users.value.filter(u => firstLetterToGyou(u.kana) === selectedGyou.value);
+  return usersInGyou(selectedGyou.value);
 });
 
 function selectGyou(g) {
   selectedGyou.value = selectedGyou.value === g ? "" : g;
   selectedUserId.value = null;
+  if (selectedGyou.value) localStorage.setItem(LAST_GYOU_KEY, selectedGyou.value);
+}
+
+function selectUser(u) {
+  selectedUserId.value = u.id;
+  localStorage.setItem(LAST_USER_KEY, u.id);
+}
+
+// 記憶された行・ユーザーを復元する。記憶が無い/該当ユーザーが既に居ない場合は
+// 「あ」行とその先頭ユーザーをデフォルトとして選択する。
+function restoreGyouAndUser() {
+  const rememberedGyou = localStorage.getItem(LAST_GYOU_KEY);
+  let gyou = rememberedGyou && gyouHasUsers(rememberedGyou) ? rememberedGyou : null;
+  if (!gyou) gyou = gyouList.find(g => gyouHasUsers(g)) || "";
+  selectedGyou.value = gyou;
+
+  const candidates     = usersInGyou(gyou);
+  const rememberedUser = localStorage.getItem(LAST_USER_KEY);
+  const matched         = candidates.find(u => u.id === rememberedUser);
+  selectedUserId.value  = matched ? matched.id : (candidates[0]?.id ?? null);
 }
 
 const password     = ref("");
@@ -269,12 +302,16 @@ function selectMethod(method) {
   errorMsg.value   = "";
   selectedGyou.value   = "";
   selectedUserId.value  = null;
+  localStorage.setItem(LAST_METHOD_KEY, method);
 }
 
 async function fetchUserOptions() {
   try {
     const res = await getLoginUserOptions(accessCode.value);
-    if (res.status === "success") users.value = res.users || [];
+    if (res.status === "success") {
+      users.value = res.users || [];
+      restoreGyouAndUser();
+    }
   } catch (e) {
     console.error(e);
   }
@@ -464,12 +501,16 @@ h1 { font-size: 20px; margin: 0; }
   box-shadow: 0 6px 18px rgba(16,24,40,0.06);
 }
 
+.section-title {
+  margin: 0 0 4px;
+}
+
 .method-tabs {
   display: flex;
   border: 1px solid #d1d5db;
   border-radius: var(--radius);
   overflow: hidden;
-  margin: 12px 0 16px;
+  margin: 0 0 16px;
 }
 
 .method-tab {
@@ -550,11 +591,12 @@ select {
 .user-item {
   width: auto;
   margin-top: 0;
-  padding: 10px 12px;
+  padding: 6px 12px;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
   background: #fff;
   color: #0b1220;
   border: 1px solid #d1d5db;
@@ -562,9 +604,18 @@ select {
   font-size: 14px;
 }
 
-.user-item .user-name { font-weight: 600; }
+.user-item .user-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
-.user-item .user-email { font-size: 12px; color: var(--muted); }
+.user-item .user-email {
+  font-size: 12px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
 
 .user-item.active {
   background: #e8f0fe;
@@ -629,9 +680,9 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .hint { font-size: 12px; color: var(--muted); text-align: center; margin: 8px 0 0; }
 
-.status-msg { color: #0f62fe; font-size: 14px; min-height: 20px; margin-top: 8px; }
+.status-msg { color: #0f62fe; font-size: 14px; margin: 4px 0; }
 
-.error-msg { color: red; font-size: 14px; min-height: 20px; }
+.error-msg { color: red; font-size: 14px; margin: 4px 0; }
 
 .small { font-size: 13px; color: var(--muted); margin-top: 12px; text-align: center; }
 
