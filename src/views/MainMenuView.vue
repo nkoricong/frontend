@@ -115,6 +115,7 @@ import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { startRegistration } from "@simplewebauthn/browser";
 import { useAuthStore } from "@/store/authStore.js";
+import { addPasskeyEmail } from "@/services/passkey.js";
 import { getWebauthnRegistrationOptions, verifyWebauthnRegistration } from "@/services/api.js";
 
 const router    = useRouter();
@@ -148,6 +149,7 @@ async function registerPasskey() {
       throw new Error(verifyRes.message || "パスキーの登録に失敗しました");
     }
 
+    addPasskeyEmail(authStore.userEmail);
     passkeyMsg.value = "パスキーを登録しました。次回からパスキーでログインできます。";
   } catch (e) {
     passkeyError.value = true;

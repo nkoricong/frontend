@@ -37,43 +37,20 @@
     </section>
 
     <section v-else class="card" id="mainCard">
-      <p class="section-title">認証方法を選んでください</p>
       <p v-if="statusMsg" class="status-msg">{{ statusMsg }}</p>
       <p v-if="errorMsg" class="error-msg">{{ errorMsg }}</p>
 
-      <!-- 認証方式セレクタ -->
-      <div class="method-tabs">
-        <button
-          type="button"
-          class="method-tab"
-          :class="{ active: authMethod === 'passkey' }"
-          @click="selectMethod('passkey')"
-        >
-          <i class="fas fa-fingerprint"></i>
-          <span>パスキー</span>
-        </button>
-        <button
-          type="button"
-          class="method-tab"
-          :class="{ active: authMethod === 'password' }"
-          @click="selectMethod('password')"
-        >
-          <i class="fas fa-key"></i>
-          <span>ID・パスワード</span>
-        </button>
-        <button
-          type="button"
-          class="method-tab"
-          :class="{ active: authMethod === 'google' }"
-          @click="selectMethod('google')"
-        >
-          <i class="fab fa-google"></i>
-          <span>Google連携</span>
-        </button>
-      </div>
+      <!-- (1) ユーザー選択 -->
+      <p class="section-title">ログインするユーザーを選択してください</p>
 
-      <!-- ユーザー選択（パスキー・ID/パスワードの両方で共通） -->
-      <div v-if="authMethod === 'passkey' || authMethod === 'password'">
+      <div v-if="!showUserPicker && selectedUser" class="selected-user-summary">
+        <div class="selected-user-info">
+          <div class="user-name">{{ selectedUser.name }}</div>
+          <div class="user-email">{{ selectedUser.email }}</div>
+        </div>
+        <button type="button" class="change-user-btn" @click="showUserPicker = true">変更</button>
+      </div>
+      <template v-else>
         <label class="field-label">ユーザー氏名の頭文字の行を選択</label>
         <div class="gyou-row">
           <button
@@ -102,11 +79,43 @@
           <p v-if="filteredUsers.length === 0" class="hint">この行に該当するユーザーがいません</p>
         </div>
         <p v-else class="hint">行を選ぶとユーザーの一覧が表示されます</p>
+      </template>
+
+      <!-- (2) 認証方式 -->
+      <p class="section-title section-title-spaced">認証方法を選んでください</p>
+      <div class="method-tabs">
+        <button
+          type="button"
+          class="method-tab"
+          :class="{ active: authMethod === 'passkey' }"
+          @click="selectMethod('passkey')"
+        >
+          <i class="fas fa-fingerprint"></i>
+          <span>パスキー</span>
+        </button>
+        <button
+          type="button"
+          class="method-tab"
+          :class="{ active: authMethod === 'password' }"
+          @click="selectMethod('password')"
+        >
+          <i class="fas fa-key"></i>
+          <span>パスワード認証</span>
+        </button>
+        <button
+          type="button"
+          class="method-tab"
+          :class="{ active: authMethod === 'google' }"
+          @click="selectMethod('google')"
+        >
+          <i class="fab fa-google"></i>
+          <span>Google連携</span>
+        </button>
       </div>
 
-      <!-- パスキー -->
+      <!-- (3) パスキー / パスワード / Google -->
       <template v-if="authMethod === 'passkey'">
-        <button v-if="hasPasskeyFlag" id="passkeyLoginBtn" @click="loginPasskey" :disabled="loading">
+        <button v-if="hasPasskeyForSelectedUser" id="passkeyLoginBtn" @click="loginPasskey" :disabled="loading">
           <i class="fas fa-fingerprint"></i>
           パスキーでログインする
         </button>
@@ -119,7 +128,6 @@
         </template>
       </template>
 
-      <!-- ID / パスワード -->
       <template v-if="authMethod === 'password'">
         <label class="field-label" for="password">パスワード</label>
         <div class="pw-wrap">
@@ -138,9 +146,12 @@
         </button>
       </template>
 
-      <!-- Google -->
       <template v-if="authMethod === 'google'">
-        <button class="oauth-btn" id="googleBtn" @click="loginGoogle" :disabled="loading">
+        <p v-if="isInAppBrowserUA" class="hint in-app-warning">
+          <i class="fas fa-exclamation-triangle"></i>
+          LINEなどのアプリ内ブラウザではGoogleログインを利用できません。Safari／Chromeなど標準のブラウザで開き直してください。
+        </p>
+        <button class="oauth-btn" id="googleBtn" @click="loginGoogle" :disabled="loading || isInAppBrowserUA">
           <img src="https://www.google.com/favicon.ico" width="18" alt="Google" />
           Googleアカウントでログイン
         </button>
@@ -179,6 +190,7 @@ import { useRouter } from "vue-router";
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
 import { useAuthStore } from "@/store/authStore.js";
 import { useOnlineStatus, hasOfflineData } from "@/services/offline.js";
+import { addPasskeyEmail, hasPasskeyForEmail } from "@/services/passkey.js";
 import {
   loginWithEmail,
   loginWithGoogle,
@@ -196,7 +208,6 @@ import {
   verifyWebauthnRegistration,
 } from "@/services/api.js";
 
-const HAS_PASSKEY_KEY   = "ekuiki_has_passkey";
 const GATE_UNLOCKED_KEY = "ekuiki_gate_unlocked";
 const LAST_METHOD_KEY   = "ekuiki_last_auth_method";
 const LAST_GYOU_KEY     = "ekuiki_last_gyou";
@@ -218,6 +229,20 @@ const checkingCode = ref(false);
 const authMethod    = ref(localStorage.getItem(LAST_METHOD_KEY) || "passkey");
 const users          = ref([]);
 const selectedUserId = ref(null);
+
+// ユーザー選択欄：前回選択したユーザーが今回も見つかった場合は折り畳んで表示する
+const showUserPicker = ref(true);
+const selectedUser = computed(() => users.value.find(u => u.id === selectedUserId.value) ?? null);
+const hasPasskeyForSelectedUser = computed(() => hasPasskeyForEmail(selectedUser.value?.email));
+
+// LINE等のアプリ内ブラウザではGoogleがOAuthログインをブロックし、サインイン画面が
+// 表示しきる前に自動的にアプリへ戻されてしまう（Googleの仕様によるもので、当アプリ側
+// では回避できない）。事前に検出し、標準ブラウザで開き直すよう案内する。
+function detectInAppBrowser() {
+  const ua = navigator.userAgent || "";
+  return /Line\/|FBAN|FBAV|Instagram|Twitter|MicroMessenger|KAKAOTALK|NAVER\(|; wv\)/i.test(ua);
+}
+const isInAppBrowserUA = ref(detectInAppBrowser());
 
 // 氏名かな（UserKana、ローマ字表記）の頭文字から五十音の行へ振り分ける
 const GYOU_LIST = ["あ", "か", "さ", "た", "な", "は", "ま", "や", "ら", "わ"];
@@ -261,10 +286,12 @@ function selectGyou(g) {
 function selectUser(u) {
   selectedUserId.value = u.id;
   localStorage.setItem(LAST_USER_KEY, u.id);
+  showUserPicker.value = false;
 }
 
 // 記憶された行・ユーザーを復元する。記憶が無い/該当ユーザーが既に居ない場合は
 // 「あ」行とその先頭ユーザーをデフォルトとして選択する。
+// 前回の選択が今回も見つかった場合のみ、選択欄を折り畳んで表示する。
 function restoreGyouAndUser() {
   const rememberedGyou = localStorage.getItem(LAST_GYOU_KEY);
   let gyou = rememberedGyou && gyouHasUsers(rememberedGyou) ? rememberedGyou : null;
@@ -275,6 +302,7 @@ function restoreGyouAndUser() {
   const rememberedUser = localStorage.getItem(LAST_USER_KEY);
   const matched         = candidates.find(u => u.id === rememberedUser);
   selectedUserId.value  = matched ? matched.id : (candidates[0]?.id ?? null);
+  showUserPicker.value  = !matched;
 }
 
 const password     = ref("");
@@ -282,8 +310,6 @@ const showPassword = ref(false);
 const loading      = ref(false);
 const statusMsg    = ref("");
 const errorMsg     = ref("");
-
-const hasPasskeyFlag = ref(localStorage.getItem(HAS_PASSKEY_KEY) === "1");
 
 const showRegisterDialog = ref(false);
 const registerPassword   = ref("");
@@ -313,11 +339,10 @@ async function submitAccessCode() {
   }
 }
 
+// 認証方法の切替はユーザー選択欄と独立しているため、選択済みユーザーは維持する
 function selectMethod(method) {
   authMethod.value = method;
   errorMsg.value   = "";
-  selectedGyou.value   = "";
-  selectedUserId.value  = null;
   localStorage.setItem(LAST_METHOD_KEY, method);
 }
 
@@ -381,15 +406,37 @@ async function loginPassword() {
   }
 }
 
+// Firebase Authのエラーコードを分かりやすい日本語メッセージに変換する
+function mapAuthError(e) {
+  switch (e?.code) {
+    case "auth/web-storage-unsupported":
+    case "auth/operation-not-supported-in-this-environment":
+      return "この端末・ブラウザではサードパーティCookieがブロックされているため、Google連携ログインを利用できません。ブラウザの設定を確認するか、他の認証方法をお試しください。";
+    case "auth/unauthorized-domain":
+      return "このサイトのドメインがGoogleログインの許可リストに登録されていません。管理者にお問い合わせください。";
+    case "auth/network-request-failed":
+      return "ネットワークエラーが発生しました。接続を確認して再度お試しください。";
+    case "auth/popup-blocked":
+    case "auth/redirect-cancelled-by-user":
+      return "Googleログインが中断されました。もう一度お試しください。";
+    default:
+      return e?.message || "認証中にエラーが発生しました";
+  }
+}
+
 async function loginGoogle() {
   errorMsg.value = "";
+  if (isInAppBrowserUA.value) {
+    errorMsg.value = "LINEなどのアプリ内ブラウザではGoogleログインを利用できません。Safari／Chromeなど標準のブラウザで開き直してください。";
+    return;
+  }
   loading.value  = true;
   try {
     // signInWithRedirect はページ遷移するため、以降の処理は
     // 戻ってきた後に onMounted 側の getGoogleRedirectResult() が引き継ぐ
     await loginWithGoogle();
   } catch (e) {
-    errorMsg.value = e.message;
+    errorMsg.value = mapAuthError(e);
     loading.value  = false;
   }
 }
@@ -418,8 +465,7 @@ async function loginPasskey() {
       throw new Error(verifyRes.message || "パスキーの検証に失敗しました");
     }
 
-    localStorage.setItem(HAS_PASSKEY_KEY, "1");
-    hasPasskeyFlag.value = true;
+    addPasskeyEmail(email);
 
     await loginWithCustomToken(verifyRes.token);
     await afterLogin();
@@ -472,8 +518,7 @@ async function submitRegisterPasskey() {
       throw new Error(verifyRes.message || "パスキーの登録に失敗しました");
     }
 
-    localStorage.setItem(HAS_PASSKEY_KEY, "1");
-    hasPasskeyFlag.value = true;
+    addPasskeyEmail(email);
     showRegisterDialog.value = false;
 
     // 既にパスワードでログイン済みなので、そのままアプリへ進む
@@ -497,7 +542,7 @@ onMounted(async () => {
       await afterLogin();
     }
   } catch (e) {
-    errorMsg.value = e.message;
+    errorMsg.value = mapAuthError(e);
   }
 });
 </script>
@@ -531,6 +576,55 @@ h1 { font-size: 20px; margin: 0; }
 
 .section-title {
   margin: 0 0 4px;
+}
+
+.section-title-spaced {
+  margin-top: 20px;
+}
+
+.selected-user-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #e8f0fe;
+}
+
+.selected-user-info {
+  overflow: hidden;
+}
+
+.selected-user-info .user-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selected-user-info .user-email {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.change-user-btn {
+  width: auto;
+  flex-shrink: 0;
+  margin-top: 0;
+  padding: 6px 14px;
+  font-size: 13px;
+  background: #fff;
+  color: var(--accent, #0f62fe);
+  border: 1px solid var(--accent, #0f62fe);
+}
+
+.in-app-warning {
+  color: #b45309;
 }
 
 .offline-card {
