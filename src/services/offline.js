@@ -72,6 +72,42 @@ export function findOfflineEntryByCard(cardNo, childNo) {
   return readIndex().find(e => String(e.cardNo) === String(cardNo) && String(e.childNo) === String(childNo)) ?? null;
 }
 
+/** オフライン化済みの子カードが1件でもあるか */
+export function hasOfflineData() {
+  return readIndex().length > 0;
+}
+
+/**
+ * オフライン保存済みの子カード一覧を、マイページ（AssignmentListView）の
+ * カード一覧と同じフィールド形式（CARDNO等）に整形して返す。
+ * ネット未接続時にマイページ／オフライン専用ページの一覧表示に使う。
+ */
+export function getOfflineChildRows() {
+  return readIndex()
+    .map(entry => {
+      const data = getOfflineChild(entry.childId);
+      if (!data) return null;
+      const c  = data.cardInfo  || {};
+      const ch = data.childInfo || {};
+      return {
+        CHILDID:           ch.ChildID ?? entry.childId,
+        CARDNO:            ch.CardNo  ?? entry.cardNo,
+        CHILDNO:           ch.ChildNo ?? entry.childNo,
+        CHILDBLOCK:        ch.ChildBlock ?? "",
+        COLOR:             c.Color ?? "",
+        CHILDSTATUS:       ch.ChildStatus ?? "",
+        CHILDHOUSES:       (data.houses || []).length || ch.ChildHouses || 0,
+        VISITED:           ch.Visited ?? 0,
+        DESCRIPTION:       ch.ChildDescription ?? "",
+        CHILDCHECKOUTDATE: ch.ChildCheckoutDate ?? null,
+        CHILDLIMITDATE:    ch.ChildLimitDate ?? null,
+        AREA:              c.Area ?? "",
+        SHARED:            false,
+      };
+    })
+    .filter(Boolean);
+}
+
 // ------------------------------------------------------------------
 // 子カード単位のオフラインデータ
 // ------------------------------------------------------------------

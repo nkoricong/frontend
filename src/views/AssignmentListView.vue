@@ -31,6 +31,12 @@
       ／ グループ：{{ authStore.userGroup }} ／ 権限：{{ authStore.userRole }}
     </div>
 
+    <!-- オフラインキャッシュ利用中の案内 -->
+    <div v-if="usingOfflineData" class="alert alert-warning py-2 px-2 small mb-3">
+      <i class="fas fa-plane"></i>
+      オフラインで保存したデータを表示しています。一覧の更新・返却・共有・QRコード読取はネット接続時のみ利用できます。
+    </div>
+
     <!-- 絞込 + 並替 + QRコード読取 + 更新ボタン -->
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-2 gap-2">
       <div class="d-flex flex-wrap gap-2">
@@ -40,7 +46,7 @@
         <button class="btn btn-outline-secondary" @click="showSortPanel = !showSortPanel">
           <i class="fas fa-sort"></i> 並替
         </button>
-        <button class="btn btn-outline-secondary" @click="openScanDialog">
+        <button v-if="!usingOfflineData" class="btn btn-outline-secondary" @click="openScanDialog">
           <i class="fas fa-qrcode"></i> QRコード読取
         </button>
       </div>
@@ -177,21 +183,21 @@
               </small>
               <div class="d-flex flex-wrap gap-2 justify-content-end">
                 <button
-                  v-if="!child.SHARED"
+                  v-if="!usingOfflineData && !child.SHARED"
                   class="btn btn-sm btn-outline-danger"
                   @click="returnCard(child)"
                 >
                   <i class="fas fa-undo"></i> 返却
                 </button>
                 <button
-                  v-else
+                  v-else-if="!usingOfflineData"
                   class="btn btn-sm btn-outline-warning"
                   @click="endShare(child)"
                 >
                   <i class="fas fa-share-alt"></i> 共有終了
                 </button>
                 <button
-                  v-if="!isOfflineChild(child)"
+                  v-if="!usingOfflineData && !isOfflineChild(child)"
                   class="btn btn-sm btn-outline-secondary"
                   @click="enableOffline(child)"
                 >
@@ -265,7 +271,7 @@ import {
   getFilteredChildCardbyUser, returnChildCard, cancelChildReturn,
   claimChildShare, endChildShare, getChildDetail,
 } from "@/services/api.js";
-import { isChildOffline, saveOfflineChild } from "@/services/offline.js";
+import { isChildOffline, saveOfflineChild, isOnline, getOfflineChildRows } from "@/services/offline.js";
 import OfflineSyncDialog from "@/components/OfflineSyncDialog.vue";
 
 const router    = useRouter();
@@ -276,6 +282,7 @@ const childs     = ref([]);
 const filterMode = ref("all");
 const loading    = ref(false);
 const isUpdating = ref(false);
+const usingOfflineData = ref(false);
 
 // 絞込パネル
 const showFilterPanel   = ref(false);
@@ -335,12 +342,24 @@ const filteredChilds = computed(() => {
 async function fetchData() {
   loading.value = true;
   try {
+    if (!isOnline()) throw new Error("offline");
     const res = await getFilteredChildCardbyUser();
     if (res.status === "success") {
       childs.value = res.cards || [];
+      usingOfflineData.value = false;
+    } else {
+      throw new Error(res.message || "取得に失敗しました");
     }
   } catch (e) {
-    console.error(e);
+    // ネットワーク不可／取得失敗時は、オフライン保存済みの子カードがあればそちらを一覧表示する
+    const offlineRows = getOfflineChildRows();
+    if (offlineRows.length > 0) {
+      childs.value = offlineRows;
+      usingOfflineData.value = true;
+    } else {
+      usingOfflineData.value = false;
+      console.error(e);
+    }
   } finally {
     loading.value = false;
   }

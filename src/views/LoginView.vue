@@ -7,6 +7,17 @@
       </div>
     </header>
 
+    <!-- オフライン利用案内（ネット未接続かつオフライン保存済みの子カードがある場合） -->
+    <section v-if="!online && hasOffline" class="card offline-card">
+      <p class="small mb-2">
+        <i class="fas fa-plane"></i>
+        ネット接続がありません。この端末に保存済みの子カードだけを、ログインなしで閲覧・結果登録できます。
+      </p>
+      <button type="button" @click="router.push({ name: 'offlineHome' })">
+        <i class="fas fa-plane"></i> オフラインで利用する
+      </button>
+    </section>
+
     <!-- アクセスコード確認（未確認の間はログイン操作を一切表示しない） -->
     <section v-if="!unlocked" class="card" id="gateCard">
       <p>アクセスコードを入力してください</p>
@@ -167,6 +178,7 @@ import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
 import { useAuthStore } from "@/store/authStore.js";
+import { useOnlineStatus, hasOfflineData } from "@/services/offline.js";
 import {
   loginWithEmail,
   loginWithGoogle,
@@ -192,6 +204,9 @@ const LAST_USER_KEY     = "ekuiki_last_user_id";
 
 const router    = useRouter();
 const authStore = useAuthStore();
+
+const online     = useOnlineStatus();
+const hasOffline = ref(hasOfflineData());
 
 const storedCode   = sessionStorage.getItem(GATE_UNLOCKED_KEY) || "";
 const unlocked     = ref(!!storedCode);
@@ -516,6 +531,16 @@ h1 { font-size: 20px; margin: 0; }
 
 .section-title {
   margin: 0 0 4px;
+}
+
+.offline-card {
+  margin-bottom: 16px;
+  background: #fff8e6;
+}
+
+.offline-card button {
+  margin-top: 4px;
+  background: #6f42c1;
 }
 
 .method-tabs {

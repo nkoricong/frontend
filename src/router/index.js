@@ -3,12 +3,19 @@
 
 import { createRouter, createWebHashHistory } from "vue-router";
 import { useAuthStore } from "@/store/authStore.js";
+import { isOnline, hasOfflineData, findOfflineEntryByCard } from "@/services/offline.js";
 
 const routes = [
   {
     path:      "/",
     name:      "login",
     component: () => import("@/views/LoginView.vue"),
+    meta:      { public: true },
+  },
+  {
+    path:      "/offline",
+    name:      "offlineHome",
+    component: () => import("@/views/OfflineHomeView.vue"),
     meta:      { public: true },
   },
   {
@@ -103,12 +110,23 @@ const router = createRouter({
 });
 
 // ナビゲーションガード: 未認証なら / へリダイレクト
+// ただし、ネット未接続かつオフライン保存済みの子カードがある場合は、
+// ログインをスキップしてオフライン専用ページ（または保存済みの子カード画面）へ誘導する。
 router.beforeEach((to) => {
   if (to.meta.public) return true;
 
   const auth = useAuthStore();
-  if (!auth.isLoggedIn) return { name: "login" };
-  return true;
+  if (auth.isLoggedIn) return true;
+
+  if (!isOnline() && hasOfflineData()) {
+    if (to.name === "childMap") {
+      const entry = findOfflineEntryByCard(to.params.cardNo, to.params.childNo);
+      if (entry) return true;
+    }
+    return { name: "offlineHome" };
+  }
+
+  return { name: "login" };
 });
 
 export default router;
