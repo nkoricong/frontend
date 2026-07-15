@@ -5,7 +5,8 @@ import { initializeApp }          from "firebase/app";
 import {
   getAuth,
   signInWithEmailAndPassword,
-  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signInWithCustomToken,
   GoogleAuthProvider,
   signOut,
@@ -35,9 +36,20 @@ export async function loginWithEmail(email, password) {
   return signInWithEmailAndPassword(auth, email, password);
 }
 
-/** Google ログイン */
+/**
+ * Google ログイン。
+ * signInWithPopup は Google のログインポップアップ側が送出する
+ * Cross-Origin-Opener-Policy によって window.close() がブロックされ
+ * コンソールエラーになるため、signInWithRedirect を使う（ページ遷移で戻り、
+ * getGoogleRedirectResult() で結果を受け取る）。
+ */
 export async function loginWithGoogle() {
-  return signInWithPopup(auth, new GoogleAuthProvider());
+  return signInWithRedirect(auth, new GoogleAuthProvider());
+}
+
+/** signInWithRedirect でのGoogleログイン後、リダイレクト結果を取得する */
+export async function getGoogleRedirectResult() {
+  return getRedirectResult(auth);
 }
 
 /** パスキー認証成功後に発行された Firebase カスタムトークンでログインする */

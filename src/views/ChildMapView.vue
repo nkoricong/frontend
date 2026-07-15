@@ -20,6 +20,14 @@
         <div class="text-center flex-grow-1">
           <div style="font-size:18px;font-weight:700;">
             {{ childInfo?.ChildBlock ?? "区域カード" }}
+            <span
+              v-if="isOfflineCard"
+              class="badge rounded-pill offline-pill ms-1"
+              style="font-size:11px;cursor:pointer;"
+              @click="showOfflineDialog = true"
+            >
+              <i class="fas fa-plane"></i> オフライン中
+            </span>
           </div>
           <div class="small text-muted">
             {{ cardInfo?.CardNo }}-{{ childInfo?.ChildNo }}
@@ -40,14 +48,25 @@
       </div>
     </header>
 
-    <!-- 地図 -->
-    <div class="d-flex justify-content-end px-2 mb-1">
-      <button class="btn btn-sm btn-outline-secondary" @click="toggleMap">
-        <i class="fas" :class="mapVisible ? 'fa-eye-slash' : 'fa-eye'"></i>
-        {{ mapVisible ? "地図を隠す" : "地図を表示" }}
-      </button>
+    <!-- オフラインキャッシュ利用中の案内 -->
+    <div v-if="usingCachedData" class="alert alert-warning py-1 px-2 small mb-2 mx-2">
+      <i class="fas fa-plane"></i> オフラインで保存したデータを表示しています
     </div>
-    <div id="mapContainer" ref="mapContainer" v-show="mapVisible"></div>
+    <div v-if="loadError" class="alert alert-danger m-2">{{ loadError }}</div>
+
+    <!-- 地図（オフライン時は保存済みの静止画像を表示） -->
+    <template v-if="!usingCachedData">
+      <div class="d-flex justify-content-end px-2 mb-1">
+        <button class="btn btn-sm btn-outline-secondary" @click="toggleMap">
+          <i class="fas" :class="mapVisible ? 'fa-eye-slash' : 'fa-eye'"></i>
+          {{ mapVisible ? "地図を隠す" : "地図を表示" }}
+        </button>
+      </div>
+      <div id="mapContainer" ref="mapContainer" v-show="mapVisible"></div>
+    </template>
+    <div v-else-if="cachedMapImage" class="px-2 mb-2">
+      <img :src="cachedMapImage" alt="保存済みの地図画像" class="img-fluid rounded border" />
+    </div>
 
     <!-- 住戸一覧 -->
     <div class="mt-3 px-2">
@@ -146,6 +165,7 @@
     v-model="showModal"
     :house="selectedHouse"
     :mode="modalMode"
+    :child-id="childInfo?.ChildID"
     @saved="onRecordSaved"
     @deleted="onRecordDeleted"
   />
@@ -182,6 +202,16 @@
     </div>
   </div>
   <div v-if="showShareModal" class="modal-backdrop fade show"></div>
+
+  <!-- オフライン同期ダイアログ -->
+  <OfflineSyncDialog
+    v-model="showOfflineDialog"
+    :child-id="childInfo?.ChildID"
+    :card-no="cardInfo?.CardNo"
+    :child-no="childInfo?.ChildNo"
+    :child-block="childInfo?.ChildBlock"
+    @released="handleOfflineReleased"
+  />
 </template>
 
 <script setup>
@@ -191,7 +221,9 @@ import QRCode from "qrcode";
 import { useAuthStore } from "@/store/authStore.js";
 import { getChildDetail, getKmlUrl, createChildShare } from "@/services/api.js";
 import { loadGoogleMaps, createMap, addMarker, addKmlLayer } from "@/services/maps.js";
+import { isChildOffline, getOfflineChild, findOfflineEntryByCard, isOnline } from "@/services/offline.js";
 import VisitModal from "@/components/VisitModal.vue";
+import OfflineSyncDialog from "@/components/OfflineSyncDialog.vue";
 
 const props = defineProps({
   cardNo:  { type: Number, required: true },
@@ -217,6 +249,39 @@ const showShareModal = ref(false);
 const shareLoading   = ref(false);
 const shareQrDataUrl = ref("");
 const shareError     = ref("");
+
+const usingCachedData  = ref(false);
+const cachedMapImage   = ref("");
+const loadError        = ref("");
+const showOfflineDialog = ref(false);
+const offlineVersion    = ref(0);
+
+const isOfflineCard = computed(() => {
+  void offlineVersion.value;
+  return childInfo.value?.ChildID ? isChildOffline(childInfo.value.ChildID) : false;
+});
+
+// オフラインモード解除後：キャッシュ表示中だった場合はネットワークから最新データを取り直す
+async function handleOfflineReleased() {
+  offlineVersion.value++;
+  if (!usingCachedData.value) return;
+
+  usingCachedData.value = false;
+  loading.value = true;
+  try {
+    const res = await getChildDetail(props.cardNo, props.childNo);
+    if (res.status === "success") {
+      cardInfo.value  = res.cardInfo;
+      childInfo.value = res.childInfo;
+      houses.value    = res.houses;
+    }
+  } catch (e) {
+    console.error(e);
+  } finally {
+    loading.value = false;
+  }
+  await initMap();
+}
 
 let mapInstance = null;
 let kmlLayer    = null;
@@ -317,17 +382,18 @@ function houseAddress(h) {
 }
 
 // 保存後：該当住戸の VisitStatus を更新
-function onRecordSaved({ house, visitStatus }) {
+// オフライン保存時は VisitModal 側で house.VRecord を直接更新済みのため、
+// ネットワーク経由の再取得（reloadHouse）は行わない
+function onRecordSaved({ house, visitStatus, offline }) {
   const target = houses.value.find(h => h.HousingNo === house.HousingNo);
   if (target) {
     target.VisitStatus = visitStatus;
-    // 再ロードして VRecord を更新
-    reloadHouse(house);
+    if (!offline) reloadHouse(house);
   }
 }
 
-function onRecordDeleted({ house, visitStatus }) {
-  onRecordSaved({ house, visitStatus });
+function onRecordDeleted({ house, visitStatus, offline }) {
+  onRecordSaved({ house, visitStatus, offline });
 }
 
 async function reloadHouse(house) {
@@ -377,19 +443,36 @@ async function initMap() {
 
 onMounted(async () => {
   try {
+    if (!isOnline()) throw new Error("offline");
     const res = await getChildDetail(props.cardNo, props.childNo);
     if (res.status === "success") {
       cardInfo.value  = res.cardInfo;
       childInfo.value = res.childInfo;
       houses.value    = res.houses;
+    } else {
+      throw new Error(res.message || "取得に失敗しました");
     }
   } catch (e) {
-    console.error(e);
+    // ネットワーク不可／取得失敗時は、オフライン保存済みのキャッシュがあればそちらを使う
+    const entry  = findOfflineEntryByCard(props.cardNo, props.childNo);
+    const cached = entry ? getOfflineChild(entry.childId) : null;
+    if (cached) {
+      cardInfo.value        = cached.cardInfo;
+      childInfo.value       = cached.childInfo;
+      houses.value          = cached.houses;
+      cachedMapImage.value  = cached.mapImage || "";
+      usingCachedData.value = true;
+    } else {
+      loadError.value = "データを取得できませんでした。ネットワーク接続を確認してください。";
+      console.error(e);
+    }
   } finally {
     loading.value = false;
   }
 
-  await initMap();
+  if (!usingCachedData.value) {
+    await initMap();
+  }
 });
 
 onUnmounted(() => {
@@ -434,4 +517,10 @@ onUnmounted(() => {
 .col-status  { width: 110px; text-align: center; }
 .col-result  { width: 100px; text-align: center; }
 .col-history { width: 60px;  text-align: center; }
+
+.offline-pill {
+  background-color: #6f42c1;
+  color: #fff;
+  vertical-align: middle;
+}
 </style>

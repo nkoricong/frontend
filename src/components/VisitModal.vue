@@ -40,12 +40,13 @@
                   </div>
                   <button
                     class="btn btn-sm btn-outline-danger"
-                    @click="deleteRecord(r.VisitID)"
-                    :disabled="saving"
+                    @click="deleteRecord(r)"
+                    :disabled="saving || (!isPendingRecord(r) && !online)"
                   >
                     <i class="fas fa-trash-alt"></i>
                   </button>
                 </div>
+                <span v-if="isPendingRecord(r)" class="badge bg-warning text-dark">未同期</span>
                 <p v-if="r.Comment" class="mb-0 small">{{ r.Comment }}</p>
                 <p v-if="r.Note"    class="mb-0 small text-muted">{{ r.Note }}</p>
               </div>
@@ -127,12 +128,20 @@
 import { ref, computed, watch, onMounted } from "vue";
 import { upsertVisitRecord, deleteVisitRecord, getUserMaster } from "@/services/api.js";
 import { useAuthStore } from "@/store/authStore.js";
+import { useOnlineStatus, isOnline, queueOfflineVisit, removeOfflineVisit } from "@/services/offline.js";
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
   house:      { type: Object, default: null },
   mode:       { type: String, default: "add" }, // 'add' | 'history'
+  childId:    { type: [String, Number], default: null },
 });
+
+const online = useOnlineStatus();
+
+function isPendingRecord(r) {
+  return typeof r.VisitID === "string" && r.VisitID.startsWith("local_");
+}
 
 const emit = defineEmits(["update:modelValue", "saved", "deleted"]);
 
@@ -177,6 +186,10 @@ onMounted(async () => {
   } catch (e) {
     console.error(e);
   }
+  // オフライン等で取得できなかった場合、担当者選択にログイン中の自分だけは出す
+  if (users.value.length === 0 && authStore.userName) {
+    users.value = [{ ID: authStore.userId ?? 0, UserName: authStore.userName }];
+  }
 });
 
 // モーダルが開くたびにフォームをリセット（担当者はログインユーザーを初期値にする）
@@ -210,17 +223,31 @@ async function submitRecord() {
   saving.value    = true;
   saveError.value = "";
 
+  const record = {
+    CardNo:    props.house.CardNo,
+    ChildNo:   props.house.ChildNo,
+    HousingNo: props.house.HousingNo,
+    NGFlag:    ngFlagEnabled.value ? "不可" : "",
+    ...form.value,
+  };
+
+  // オフライン時は端末内にキューイングし、Supabaseへは同期時にまとめて書き込む
+  if (!isOnline()) {
+    const result = queueOfflineVisit(props.childId, record, props.house);
+    saving.value = false;
+    if (!result) {
+      saveError.value = "オフラインのため保存できません（この子カードはオフライン保存されていません）";
+      return;
+    }
+    emit("saved", { house: props.house, visitStatus: result.visitStatus, offline: true });
+    emit("update:modelValue", false);
+    return;
+  }
+
   try {
-    const record = {
-      CardNo:    props.house.CardNo,
-      ChildNo:   props.house.ChildNo,
-      HousingNo: props.house.HousingNo,
-      NGFlag:    ngFlagEnabled.value ? "不可" : "",
-      ...form.value,
-    };
     const res = await upsertVisitRecord(record);
     if (res.status === "success") {
-      emit("saved", { house: props.house, visitStatus: res.visitStatus });
+      emit("saved", { house: props.house, visitStatus: res.visitStatus, offline: false });
       emit("update:modelValue", false);
     } else {
       saveError.value = res.message || "保存に失敗しました";
@@ -232,13 +259,27 @@ async function submitRecord() {
   }
 }
 
-async function deleteRecord(VisitID) {
+async function deleteRecord(record) {
   if (!confirm("この訪問記録を削除しますか？")) return;
+
+  // 未同期（オフラインでローカルにのみ存在）の記録はネット不要でそのまま削除する
+  if (isPendingRecord(record)) {
+    const result = removeOfflineVisit(props.childId, record.VisitID, props.house);
+    emit("deleted", { house: props.house, visitStatus: result?.visitStatus ?? props.house?.VisitStatus, offline: true });
+    emit("update:modelValue", false);
+    return;
+  }
+
+  if (!isOnline()) {
+    saveError.value = "オフラインのため、この記録は削除できません";
+    return;
+  }
+
   saving.value = true;
   try {
-    const res = await deleteVisitRecord(VisitID);
+    const res = await deleteVisitRecord(record.VisitID);
     if (res.status === "success") {
-      emit("deleted", { house: props.house, visitStatus: res.visitStatus });
+      emit("deleted", { house: props.house, visitStatus: res.visitStatus, offline: false });
       emit("update:modelValue", false);
     }
   } catch (e) {
