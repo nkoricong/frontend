@@ -35,6 +35,9 @@
         <button class="btn alert-secondary col-12 text-left mb-3" @click="router.push({ name: 'siteSettings' })">
           <h5 class="mb-0"><i class="fas fa-shield-alt"></i> サイト設定（アクセスコード）</h5>
         </button>
+        <button class="btn alert-primary col-12 text-left mb-3" @click="router.push({ name: 'announcementApproval' })">
+          <h5 class="mb-0"><i class="far fa-newspaper"></i> お知らせの掲載承認</h5>
+        </button>
       </div>
       <div class="col-sm-2"></div>
     </div>

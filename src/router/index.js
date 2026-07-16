@@ -96,6 +96,11 @@ const routes = [
     component: () => import("@/views/ImportKibanCSVView.vue"),
   },
   {
+    path:      "/settings/announcements",
+    name:      "editAnnouncementList",
+    component: () => import("@/views/AnnouncementEditListView.vue"),
+  },
+  {
     path:      "/admin",
     name:      "admins",
     component: () => import("@/views/AdminsView.vue"),
@@ -109,6 +114,11 @@ const routes = [
     path:      "/admin/site-settings",
     name:      "siteSettings",
     component: () => import("@/views/SiteSettingsView.vue"),
+  },
+  {
+    path:      "/admin/announcements",
+    name:      "announcementApproval",
+    component: () => import("@/views/AnnouncementApprovalView.vue"),
   },
 ];
 
