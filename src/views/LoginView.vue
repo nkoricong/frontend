@@ -115,10 +115,13 @@
 
       <!-- (3) パスキー / パスワード / Google -->
       <template v-if="authMethod === 'passkey'">
-        <button v-if="hasPasskeyForSelectedUser" id="passkeyLoginBtn" @click="loginPasskey" :disabled="loading">
-          <i class="fas fa-fingerprint"></i>
-          パスキーでログインする
-        </button>
+        <p v-if="checkingPasskey" class="hint">確認中...</p>
+        <template v-else-if="hasPasskeyForSelectedUser">
+          <button id="passkeyLoginBtn" @click="loginPasskey" :disabled="loading">
+            <i class="fas fa-fingerprint"></i>
+            パスキーでログインする
+          </button>
+        </template>
         <template v-else>
           <button id="passkeyRegisterBtn" class="oauth-btn" @click="openRegisterDialog" :disabled="loading">
             <i class="fas fa-plus"></i>
@@ -151,10 +154,8 @@
           <i class="fas fa-exclamation-triangle"></i>
           LINEなどのアプリ内ブラウザではGoogleログインを利用できません。Safari／Chromeなど標準のブラウザで開き直してください。
         </p>
-        <button class="oauth-btn" id="googleBtn" @click="loginGoogle" :disabled="loading || isInAppBrowserUA">
-          <img src="https://www.google.com/favicon.ico" width="18" alt="Google" />
-          Googleアカウントでログイン
-        </button>
+        <div v-show="!isInAppBrowserUA" ref="googleButtonEl" class="google-btn-container"></div>
+        <p v-if="googleButtonError" class="error-msg">{{ googleButtonError }}</p>
       </template>
     </section>
 
@@ -185,16 +186,15 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, watch, nextTick, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
 import { useAuthStore } from "@/store/authStore.js";
 import { useOnlineStatus, hasOfflineData } from "@/services/offline.js";
-import { addPasskeyEmail, hasPasskeyForEmail } from "@/services/passkey.js";
 import {
   loginWithEmail,
-  loginWithGoogle,
-  getGoogleRedirectResult,
+  loginWithGoogleCredential,
+  renderGoogleSignInButton,
   loginWithCustomToken,
 } from "@/services/auth.js";
 import {
@@ -202,6 +202,7 @@ import {
   verifySiteAccessCode,
   getLoginUserOptions,
   resolveLoginEmail,
+  hasPasskeyForEmail,
   getWebauthnAuthenticationOptions,
   verifyWebauthnAuthentication,
   getWebauthnRegistrationOptions,
@@ -233,7 +234,27 @@ const selectedUserId = ref(null);
 // ユーザー選択欄：前回選択したユーザーが今回も見つかった場合は折り畳んで表示する
 const showUserPicker = ref(true);
 const selectedUser = computed(() => users.value.find(u => u.id === selectedUserId.value) ?? null);
-const hasPasskeyForSelectedUser = computed(() => hasPasskeyForEmail(selectedUser.value?.email));
+
+// 選択中ユーザーのパスキー登録有無はサーバーに問い合わせて判定する（#64）。
+// 以前は端末のlocalStorageで判定していたが、iOSでは通常のSafariタブと
+// ホーム画面追加（スタンドアロン）でストレージが分離されるため、登録済みの
+// 組み合わせでも「登録する」側が誤表示されることがあった。
+const hasPasskeyForSelectedUser = ref(false);
+const checkingPasskey           = ref(false);
+
+watch(() => selectedUser.value?.email, async (email) => {
+  hasPasskeyForSelectedUser.value = false;
+  if (!email) return;
+  checkingPasskey.value = true;
+  try {
+    const res = await hasPasskeyForEmail(email);
+    hasPasskeyForSelectedUser.value = res.status === "success" && !!res.hasPasskey;
+  } catch {
+    hasPasskeyForSelectedUser.value = false;
+  } finally {
+    checkingPasskey.value = false;
+  }
+}, { immediate: true });
 
 // LINE等のアプリ内ブラウザではGoogleがOAuthログインをブロックし、サインイン画面が
 // 表示しきる前に自動的にアプリへ戻されてしまう（Googleの仕様によるもので、当アプリ側
@@ -332,6 +353,7 @@ async function submitAccessCode() {
     sessionStorage.setItem(GATE_UNLOCKED_KEY, accessCode.value);
     unlocked.value = true;
     await fetchUserOptions();
+    if (authMethod.value === "google") ensureGoogleButton();
   } catch (e) {
     gateError.value = e.message;
   } finally {
@@ -424,22 +446,38 @@ function mapAuthError(e) {
   }
 }
 
-async function loginGoogle() {
+// ---- Google連携（Google Identity Services） ----
+const googleButtonEl    = ref(null);
+const googleButtonError = ref("");
+let googleButtonRendered = false;
+
+async function ensureGoogleButton() {
+  if (isInAppBrowserUA.value || googleButtonRendered) return;
+  await nextTick();
+  if (!googleButtonEl.value) return;
+  googleButtonRendered = true;
+  await renderGoogleSignInButton(
+    googleButtonEl.value,
+    handleGoogleCredential,
+    (e) => { googleButtonError.value = e.message; },
+  );
+}
+
+async function handleGoogleCredential(idToken) {
   errorMsg.value = "";
-  if (isInAppBrowserUA.value) {
-    errorMsg.value = "LINEなどのアプリ内ブラウザではGoogleログインを利用できません。Safari／Chromeなど標準のブラウザで開き直してください。";
-    return;
-  }
   loading.value  = true;
   try {
-    // signInWithRedirect はページ遷移するため、以降の処理は
-    // 戻ってきた後に onMounted 側の getGoogleRedirectResult() が引き継ぐ
-    await loginWithGoogle();
+    await loginWithGoogleCredential(idToken);
+    await afterLogin();
   } catch (e) {
     errorMsg.value = mapAuthError(e);
     loading.value  = false;
   }
 }
+
+watch(authMethod, (m) => {
+  if (m === "google") ensureGoogleButton();
+});
 
 async function loginPasskey() {
   errorMsg.value = "";
@@ -464,8 +502,6 @@ async function loginPasskey() {
     if (verifyRes.status !== "success") {
       throw new Error(verifyRes.message || "パスキーの検証に失敗しました");
     }
-
-    addPasskeyEmail(email);
 
     await loginWithCustomToken(verifyRes.token);
     await afterLogin();
@@ -518,7 +554,7 @@ async function submitRegisterPasskey() {
       throw new Error(verifyRes.message || "パスキーの登録に失敗しました");
     }
 
-    addPasskeyEmail(email);
+    hasPasskeyForSelectedUser.value = true;
     showRegisterDialog.value = false;
 
     // 既にパスワードでログイン済みなので、そのままアプリへ進む
@@ -531,18 +567,10 @@ async function submitRegisterPasskey() {
   }
 }
 
-onMounted(async () => {
-  if (unlocked.value) fetchUserOptions();
-
-  // Google連携（signInWithRedirect）から戻ってきた場合、結果を受け取ってログインを完了させる
-  try {
-    const result = await getGoogleRedirectResult();
-    if (result) {
-      loading.value = true;
-      await afterLogin();
-    }
-  } catch (e) {
-    errorMsg.value = mapAuthError(e);
+onMounted(() => {
+  if (unlocked.value) {
+    fetchUserOptions();
+    if (authMethod.value === "google") ensureGoogleButton();
   }
 });
 </script>
@@ -625,6 +653,12 @@ h1 { font-size: 20px; margin: 0; }
 
 .in-app-warning {
   color: #b45309;
+}
+
+.google-btn-container {
+  margin-top: 16px;
+  display: flex;
+  justify-content: center;
 }
 
 .offline-card {

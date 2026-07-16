@@ -108,13 +108,17 @@
                 <i class="fas fa-user-edit"></i> 割当変更
               </button>
               <button
-                v-if="isRelendable(child)"
+                v-if="isCheckoutable(child)"
                 class="btn btn-sm btn-outline-success"
                 @click.stop="openAssignModal(child)"
               >
                 <i class="fas fa-hand-holding"></i> 貸出
               </button>
-              <button v-else class="btn btn-sm btn-outline-danger" @click.stop="returnCard(child)">
+              <button
+                v-else-if="child.CHILDSTATUS === '貸出中'"
+                class="btn btn-sm btn-outline-danger"
+                @click.stop="returnCard(child)"
+              >
                 <i class="fas fa-undo"></i> 返却
               </button>
             </div>
@@ -222,9 +226,9 @@ function isOverdue(child) {
   return child.CHILDSTATUS === "貸出中" && child.CHILDLIMITDATE < new Date().toISOString().slice(0, 10);
 }
 
-// 返却済かつ使用期限が到来していない子カードは「貸出」ボタンで再度貸し出せるようにする
-function isRelendable(child) {
-  if (child.CHILDSTATUS !== "返却済") return false;
+// 貸出可能・返却済で、かつ使用期限が到来していない子カードは「貸出」ボタンで貸し出せるようにする
+function isCheckoutable(child) {
+  if (child.CHILDSTATUS !== "貸出可能" && child.CHILDSTATUS !== "返却済") return false;
   if (!child.CHILDLIMITDATE) return true;
   return child.CHILDLIMITDATE >= new Date().toISOString().slice(0, 10);
 }

@@ -73,6 +73,16 @@ export async function resolveLoginEmail(userId, accessCode) {
   return callWorkerPublic({ funcName: "resolveLoginEmail", userId, accessCode });
 }
 
+/**
+ * 指定メールアドレスにパスキーが登録済みかどうかをサーバーに問い合わせる
+ * （未ログイン状態で呼ぶため認証不要）。ログイン画面の「パスキーでログインする」／
+ * 「パスキーを登録する」ボタンの出し分けに使う。端末のlocalStorageに頼らないため、
+ * iOSのSafariタブ/ホーム画面追加間のストレージ分離の影響を受けない。
+ */
+export async function hasPasskeyForEmail(email) {
+  return callWorkerPublic({ funcName: "hasPasskeyForEmail", email });
+}
+
 /** パスキーログイン用の認証オプションを取得する（未ログイン状態で呼ぶため認証不要） */
 export async function getWebauthnAuthenticationOptions(email) {
   return callWorkerPublic({ funcName: "getWebauthnAuthenticationOptions", email });
