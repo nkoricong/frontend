@@ -325,6 +325,50 @@ export async function importKibanCsv({ cardNo, childNo, rows }) {
   return callWorker({ funcName: "importKibanCsv", cardNo, childNo, rows });
 }
 
+// ----------------------------------------------------------------
+// お知らせ（ホーム画面掲載記事）
+// ----------------------------------------------------------------
+
+/** ホーム画面用：現在掲載中のお知らせ一覧を取得する */
+export async function getActiveAnnouncements() {
+  return callWorker({ funcName: "getActiveAnnouncements" });
+}
+
+/** 入力奉仕者向け：自分が投稿したお知らせ一覧を取得する */
+export async function getMyAnnouncements() {
+  return callWorker({ funcName: "getMyAnnouncements" });
+}
+
+/** 入力奉仕者向け：お知らせを新規作成／更新する */
+export async function upsertMyAnnouncement(record) {
+  return callWorker({ funcName: "upsertMyAnnouncement", ...record });
+}
+
+/** 管理者向け：お知らせ全件を取得する */
+export async function getAllAnnouncements() {
+  return callWorker({ funcName: "getAllAnnouncements" });
+}
+
+/** 管理者向け：お知らせを承認して掲載中にする */
+export async function approveAnnouncement(id) {
+  return callWorker({ funcName: "approveAnnouncement", ID: id });
+}
+
+/** 管理者向け：お知らせに修正依頼を送る（掲載待ちへ差し戻す） */
+export async function requestAnnouncementRevision(id, comment) {
+  return callWorker({ funcName: "requestAnnouncementRevision", ID: id, Comment: comment });
+}
+
+/** 管理者向け：お知らせの掲載を中止する */
+export async function discontinueAnnouncement(id) {
+  return callWorker({ funcName: "discontinueAnnouncement", ID: id });
+}
+
+/** 管理者向け：お知らせを削除する */
+export async function deleteAnnouncement(id) {
+  return callWorker({ funcName: "deleteAnnouncement", ID: id });
+}
+
 /**
  * KML ファイルを取得する
  * @param {string}      file
