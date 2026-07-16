@@ -52,6 +52,11 @@
     <div v-if="usingCachedData" class="alert alert-warning py-1 px-2 small mb-2 mx-2">
       <i class="fas fa-plane"></i> オフラインで保存したデータを表示しています
     </div>
+    <div v-if="usingCachedData && cachedOfflineUser" class="small text-muted px-2 mb-2 text-start">
+      <i class="fas fa-user"></i>
+      {{ cachedOfflineUser.userName || "-" }}（UserID: {{ cachedOfflineUser.userId ?? "-" }}）
+      ／ グループ：{{ cachedOfflineUser.userGroup || "-" }}
+    </div>
     <div v-if="loadError" class="alert alert-danger m-2">{{ loadError }}</div>
 
     <!-- 地図（オフライン時は保存済みの静止画像を表示） -->
@@ -166,6 +171,7 @@
     :house="selectedHouse"
     :mode="modalMode"
     :child-id="childInfo?.ChildID"
+    :offline-user="usingCachedData ? cachedOfflineUser : null"
     @saved="onRecordSaved"
     @deleted="onRecordDeleted"
   />
@@ -252,6 +258,7 @@ const shareError     = ref("");
 
 const usingCachedData  = ref(false);
 const cachedMapImage   = ref("");
+const cachedOfflineUser = ref(null);
 const loadError        = ref("");
 const showOfflineDialog = ref(false);
 const offlineVersion    = ref(0);
@@ -461,6 +468,7 @@ onMounted(async () => {
       childInfo.value       = cached.childInfo;
       houses.value          = cached.houses;
       cachedMapImage.value  = cached.mapImage || "";
+      cachedOfflineUser.value = cached.offlineUser || null;
       usingCachedData.value = true;
     } else {
       loadError.value = "データを取得できませんでした。ネットワーク接続を確認してください。";

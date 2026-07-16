@@ -143,20 +143,21 @@
       >
         <div
           class="card shadow-sm h-100"
-          :style="{ borderLeft: `6px solid ${child.COLOR || '#ccc'}` }"
+          :class="{ 'card-returned': isReturned(child), 'card-overdue': !isReturned(child) && isOverdue(child) }"
+          :style="{ borderLeft: `6px solid ${colorBg(child.COLOR)}` }"
         >
           <div class="card-body">
             <div class="d-flex justify-content-between align-items-start mb-1">
               <h5 class="card-title mb-0">
-                <span class="cardno-badge">{{ child.CARDNO }}-{{ child.CHILDNO }}</span>
+                <span class="cardno-badge" :style="{ backgroundColor: colorBg(child.COLOR), borderColor: colorBg(child.COLOR) }">{{ child.CARDNO }}-{{ child.CHILDNO }}</span>
                 {{ child.CHILDBLOCK }}
               </h5>
               <div class="d-flex flex-column align-items-end gap-1">
                 <span
                   class="badge rounded-pill"
-                  :class="{ 'pill-clickable': child.CHILDSTATUS === '返却済' && !child.SHARED }"
+                  :class="{ 'pill-clickable': isReturned(child) && !child.SHARED }"
                   :style="statusPillStyle(child.CHILDSTATUS)"
-                  @click="child.CHILDSTATUS === '返却済' && !child.SHARED && cancelReturn(child)"
+                  @click="isReturned(child) && !child.SHARED && cancelReturn(child)"
                 >
                   {{ child.CHILDSTATUS }}
                 </span>
@@ -171,7 +172,7 @@
             </div>
 
             <p class="mb-1 small text-muted">
-              {{ child.CHILDHOUSES }}件 ／ 訪問済：{{ child.VISITED ?? 0 }}件
+              {{ child.CHILDHOUSES }}件 ／ 残件数：{{ remainingOf(child) }}件
             </p>
 
             <p v-if="child.DESCRIPTION" class="mb-1 small">{{ child.DESCRIPTION }}</p>
@@ -181,7 +182,7 @@
                 貸出: {{ child.CHILDCHECKOUTDATE ?? "-" }} ／
                 期限: {{ child.CHILDLIMITDATE ?? "-" }}
               </small>
-              <div class="d-flex flex-wrap gap-2 justify-content-end">
+              <div v-if="!isReturned(child)" class="d-flex flex-wrap gap-2 justify-content-end">
                 <button
                   v-if="!usingOfflineData && !child.SHARED"
                   class="btn btn-sm btn-outline-danger"
@@ -302,6 +303,27 @@ function remainingOf(child) {
   return (child.CHILDHOUSES ?? 0) - (child.VISITED ?? 0);
 }
 
+function isReturned(child) {
+  return child.CHILDSTATUS === "返却済";
+}
+
+// 使用期限日（CHILDLIMITDATE）を過ぎているかどうか
+function isOverdue(child) {
+  if (!child.CHILDLIMITDATE) return false;
+  const limit = new Date(child.CHILDLIMITDATE);
+  if (Number.isNaN(limit.getTime())) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  limit.setHours(0, 0, 0, 0);
+  return limit < today;
+}
+
+// カードの色ラベル（赤/青/黄/緑/白/★）をCSS色に変換する（区域リスト画面と同一の配色）
+const COLOR_MAP = { 赤: "#ffb6c1", 青: "#87cefa", 黄: "#ffd700", 緑: "#00FF00", "★": "#00FF00" };
+function colorBg(color) {
+  return COLOR_MAP[color] || "#e0e0e0";
+}
+
 const SORT_FIELDS = {
   area:         c => c.AREA ?? "",
   color:        c => c.COLOR ?? "",
@@ -371,7 +393,14 @@ async function refresh() {
   isUpdating.value = false;
 }
 
+function warnIfOverdue(child) {
+  if (isOverdue(child)) {
+    alert("使用期限を過ぎています。使用にあたっては区域担当者にご相談ください。");
+  }
+}
+
 function openChildMap(child) {
+  warnIfOverdue(child);
   router.push({
     name:   "childMap",
     params: { cardNo: child.CARDNO, childNo: child.CHILDNO },
@@ -524,6 +553,7 @@ function isOfflineChild(child) {
 }
 
 async function enableOffline(child) {
+  warnIfOverdue(child);
   if (!confirm("オフラインでも区域カードを使用できるようにしますか。")) return;
   try {
     const res = await getChildDetail(child.CARDNO, child.CHILDNO);
@@ -535,6 +565,11 @@ async function enableOffline(child) {
       cardInfo:  res.cardInfo,
       childInfo: res.childInfo,
       houses:    res.houses,
+      offlineUser: {
+        userName:  authStore.userName,
+        userId:    authStore.userId,
+        userGroup: authStore.userGroup,
+      },
     });
     offlineVersion.value++;
   } catch (e) {
@@ -599,6 +634,15 @@ onUnmounted(() => {
   font-weight: bold;
   margin-right: 6px;
   font-size: 14px;
+  color: #212529;
+}
+
+.card-returned {
+  background-color: #f0f0f0;
+}
+
+.card-overdue {
+  background-color: #fdeaea;
 }
 
 .pill-clickable {

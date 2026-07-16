@@ -125,8 +125,13 @@ function writeOfflineChild(childId, data) {
   localStorage.setItem(CHILD_KEY_PREFIX + childId, JSON.stringify(data));
 }
 
-/** 子カードをオフライン化する（区域カード情報・住戸一覧・地図画像を保存） */
-export async function saveOfflineChild(childId, cardNo, childNo, { cardInfo, childInfo, houses }) {
+/**
+ * 子カードをオフライン化する（区域カード情報・住戸一覧・地図画像を保存）。
+ * offlineUser（オフライン化した時点のログインユーザー名・UserID・グループ名）も
+ * あわせて保存し、完全オフライン／未ログインでの閲覧時にも「誰が使用しているか」を
+ * 表示したり、訪問結果登録時の担当者として使えるようにする。
+ */
+export async function saveOfflineChild(childId, cardNo, childNo, { cardInfo, childInfo, houses, offlineUser }) {
   const mapImage = await fetchStaticMapImage(childInfo, houses).catch(() => null);
 
   writeOfflineChild(childId, {
@@ -134,6 +139,7 @@ export async function saveOfflineChild(childId, cardNo, childNo, { cardInfo, chi
     childInfo,
     houses,
     mapImage,
+    offlineUser: offlineUser || null,
     pendingVisits: [],
     savedAt: new Date().toISOString(),
   });
@@ -141,6 +147,19 @@ export async function saveOfflineChild(childId, cardNo, childNo, { cardInfo, chi
   const index = readIndex().filter(e => String(e.childId) !== String(childId));
   index.push({ childId, cardNo, childNo, savedAt: new Date().toISOString() });
   writeIndex(index);
+}
+
+/**
+ * オフライン専用ページ等で表示する「このデバイスをオフライン化したユーザー」情報を返す。
+ * 複数の子カードがオフライン化されている場合は、最後に保存されたものを優先する。
+ */
+export function getOfflineUserInfo() {
+  const sorted = [...readIndex()].sort((a, b) => (b.savedAt || "").localeCompare(a.savedAt || ""));
+  for (const entry of sorted) {
+    const data = getOfflineChild(entry.childId);
+    if (data?.offlineUser) return data.offlineUser;
+  }
+  return null;
 }
 
 /** オフラインモードを解除し、保存していたデータを削除する */

@@ -16,6 +16,12 @@
       </div>
     </header>
 
+    <div v-if="offlineUserInfo" class="offline-user-info small text-muted mb-2">
+      <i class="fas fa-user"></i>
+      {{ offlineUserInfo.userName || "-" }}（UserID: {{ offlineUserInfo.userId ?? "-" }}）
+      ／ グループ：{{ offlineUserInfo.userGroup || "-" }}
+    </div>
+
     <div class="alert" :class="online ? 'alert-success' : 'alert-warning'">
       <i class="fas" :class="online ? 'fa-wifi' : 'fa-plane'"></i>
       <span v-if="online">
@@ -32,11 +38,11 @@
 
     <div class="row g-3">
       <div class="col-12 col-sm-6" v-for="child in offlineChilds" :key="child.CHILDID">
-        <div class="card shadow-sm h-100" :style="{ borderLeft: `6px solid ${child.COLOR || '#ccc'}` }">
+        <div class="card shadow-sm h-100" :style="{ borderLeft: `6px solid ${colorBg(child.COLOR)}` }">
           <div class="card-body">
             <div class="d-flex justify-content-between align-items-start mb-1">
               <h5 class="card-title mb-0">
-                <span class="cardno-badge">{{ child.CARDNO }}-{{ child.CHILDNO }}</span>
+                <span class="cardno-badge" :style="{ backgroundColor: colorBg(child.COLOR), borderColor: colorBg(child.COLOR) }">{{ child.CARDNO }}-{{ child.CHILDNO }}</span>
                 {{ child.CHILDBLOCK }}
               </h5>
               <span class="badge rounded-pill offline-pill">
@@ -75,19 +81,27 @@
 <script setup>
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
-import { getOfflineChildRows, useOnlineStatus } from "@/services/offline.js";
+import { getOfflineChildRows, getOfflineUserInfo, useOnlineStatus } from "@/services/offline.js";
 
 const router = useRouter();
 const online = useOnlineStatus();
 
-const offlineChilds = ref([]);
+const offlineChilds  = ref([]);
+const offlineUserInfo = ref(null);
 
 function refresh() {
-  offlineChilds.value = getOfflineChildRows();
+  offlineChilds.value  = getOfflineChildRows();
+  offlineUserInfo.value = getOfflineUserInfo();
 }
 
 function openChildMap(child) {
   router.push({ name: "childMap", params: { cardNo: child.CARDNO, childNo: child.CHILDNO } });
+}
+
+// カードの色ラベル（赤/青/黄/緑/白/★）をCSS色に変換する（マイページ画面と同一の配色）
+const COLOR_MAP = { 赤: "#ffb6c1", 青: "#87cefa", 黄: "#ffd700", 緑: "#00FF00", "★": "#00FF00" };
+function colorBg(color) {
+  return COLOR_MAP[color] || "#e0e0e0";
 }
 
 onMounted(refresh);
@@ -101,6 +115,7 @@ onMounted(refresh);
   font-weight: bold;
   margin-right: 6px;
   font-size: 14px;
+  color: #212529;
 }
 
 .offline-pill {

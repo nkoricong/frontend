@@ -80,7 +80,10 @@
 
             <div class="col-6">
               <label class="form-label small">担当者</label>
-              <select class="form-select form-select-sm" v-model="form.Minister">
+              <div v-if="offlineUser" class="form-control form-control-sm bg-light">
+                {{ form.Minister || "-" }}
+              </div>
+              <select v-else class="form-select form-select-sm" v-model="form.Minister">
                 <option value="">選択してください</option>
                 <option v-for="u in users" :key="u.ID" :value="u.UserName">{{ u.UserName }}</option>
               </select>
@@ -131,10 +134,14 @@ import { useAuthStore } from "@/store/authStore.js";
 import { useOnlineStatus, isOnline, queueOfflineVisit, removeOfflineVisit } from "@/services/offline.js";
 
 const props = defineProps({
-  modelValue: { type: Boolean, default: false },
-  house:      { type: Object, default: null },
-  mode:       { type: String, default: "add" }, // 'add' | 'history'
-  childId:    { type: [String, Number], default: null },
+  modelValue:  { type: Boolean, default: false },
+  house:       { type: Object, default: null },
+  mode:        { type: String, default: "add" }, // 'add' | 'history'
+  childId:     { type: [String, Number], default: null },
+  // オフラインモード（未ログインでのキャッシュ閲覧含む）で子カードを開いている場合、
+  // その子カードをオフライン化した時点のユーザー情報。指定時は担当者選択欄の代わりに
+  // このユーザー名を固定表示し、選択操作を不要にする。
+  offlineUser: { type: Object, default: null },
 });
 
 const online = useOnlineStatus();
@@ -180,6 +187,9 @@ const form = ref({
 });
 
 onMounted(async () => {
+  // オフラインモードでは担当者欄は固定表示のみのため、ユーザー一覧の取得は不要
+  if (props.offlineUser) return;
+
   try {
     const res = await getUserMaster();
     if (res.status === "success") users.value = res.users || [];
@@ -192,14 +202,15 @@ onMounted(async () => {
   }
 });
 
-// モーダルが開くたびにフォームをリセット（担当者はログインユーザーを初期値にする）
+// モーダルが開くたびにフォームをリセット（担当者はログインユーザー、
+// オフラインモードではオフライン化した時点のユーザーを初期値にする）
 watch(() => props.modelValue, (v) => {
   if (v) {
     form.value = {
       VisitDate: new Date().toISOString().slice(0, 10),
       Time:      "",
       Result:    "",
-      Minister:  authStore.userName || "",
+      Minister:  props.offlineUser?.userName || authStore.userName || "",
       Comment:   "",
       Note:      "",
     };
