@@ -4,6 +4,8 @@
 import { initializeApp }          from "firebase/app";
 import {
   getAuth,
+  setPersistence,
+  browserLocalPersistence,
   signInWithEmailAndPassword,
   signInWithRedirect,
   getRedirectResult,
@@ -23,6 +25,12 @@ const firebaseConfig = {
 
 const app  = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+
+// ブラウザのリロード／再訪問でもログイン状態が保持されるよう、
+// 明示的に永続化方式（IndexedDB/localStorageベース）を指定する。
+// 既定値でも同じ設定になるはずだが、暗黙の既定挙動に依存せず明示することで、
+// 「リロードするとログイン画面に戻される」事象の原因切り分け・再発防止とする。
+const persistenceReady = setPersistence(auth, browserLocalPersistence);
 
 /** 現在のユーザーの ID Token を取得する */
 export async function getIdToken() {
@@ -63,11 +71,25 @@ export async function logout() {
 }
 
 /**
- * 認証状態の変化を監視する
+ * 認証状態の変化を監視する。永続化方式の設定完了を待ってから購読することで、
+ * リロード直後に一瞬だけ未ログイン扱いになってしまうような競合を避ける。
  * @param {Function} callback - (user | null) => void
+ * @returns {Function} 監視を解除する関数
  */
 export function watchAuthState(callback) {
-  return onAuthStateChanged(auth, callback);
+  let unsubscribe = () => {};
+  let cancelled   = false;
+
+  persistenceReady
+    .catch(() => {}) // 永続化設定に失敗しても認証状態の監視自体は続行する
+    .then(() => {
+      if (!cancelled) unsubscribe = onAuthStateChanged(auth, callback);
+    });
+
+  return () => {
+    cancelled = true;
+    unsubscribe();
+  };
 }
 
 export { auth };
