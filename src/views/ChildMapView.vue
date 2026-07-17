@@ -10,7 +10,7 @@
   <main class="container-fluid py-2">
 
     <!-- ヘッダー -->
-    <header class="sticky-top bg-white mb-2 py-2 border-bottom">
+    <header class="sticky-top bg-white mb-2 py-2 border-bottom" ref="headerEl">
       <div class="d-flex justify-content-between align-items-center px-2">
         <button class="btn btn-link p-0 text-center" @click="router.back()">
           <i class="fas fa-arrow-circle-left fa-2x"></i>
@@ -60,14 +60,17 @@
     <div v-if="loadError" class="alert alert-danger m-2">{{ loadError }}</div>
 
     <!-- 地図（オフライン時は保存済みの静止画像を表示） -->
+    <!-- 住戸一覧をスクロールしても地図が隠れないよう、ヘッダー直下に固定表示する -->
     <template v-if="!usingCachedData">
-      <div class="d-flex justify-content-end px-2 mb-1">
-        <button class="btn btn-sm btn-outline-secondary" @click="toggleMap">
-          <i class="fas" :class="mapVisible ? 'fa-eye-slash' : 'fa-eye'"></i>
-          {{ mapVisible ? "地図を隠す" : "地図を表示" }}
-        </button>
+      <div class="map-sticky-wrapper" :style="{ top: headerHeight + 'px' }">
+        <div class="d-flex justify-content-end px-2 mb-1">
+          <button class="btn btn-sm btn-outline-secondary" @click="toggleMap">
+            <i class="fas" :class="mapVisible ? 'fa-eye-slash' : 'fa-eye'"></i>
+            {{ mapVisible ? "地図を隠す" : "地図を表示" }}
+          </button>
+        </div>
+        <div id="mapContainer" ref="mapContainer" v-show="mapVisible"></div>
       </div>
-      <div id="mapContainer" ref="mapContainer" v-show="mapVisible"></div>
     </template>
     <div v-else-if="cachedMapImage" class="px-2 mb-2">
       <img :src="cachedMapImage" alt="保存済みの地図画像" class="img-fluid rounded border" />
@@ -93,8 +96,9 @@
             <tr>
               <th class="col-id">#</th>
               <th class="col-ng">NG</th>
-              <th class="col-name">氏名・建物</th>
+              <th class="col-name">氏名</th>
               <th class="col-address">住所</th>
+              <th class="col-building">建物</th>
               <th class="col-status">ステータス</th>
               <th class="col-lastvisit">最新訪問日</th>
               <th class="col-result">最新結果</th>
@@ -116,15 +120,19 @@
               </td>
               <td>
                 <button type="button" class="btn btn-link p-0 text-start" @click.stop="openHouseInfoModal(h)">
-                  <span v-if="buildingIconClass(h)" class="me-1 text-secondary">
-                    <i class="fas" :class="buildingIconClass(h)"></i>
-                  </span>
-                  <span>{{ h.FamilyName || "(表記なし)" }}</span>
-                  <div class="small text-muted">{{ h.BuildingName }} {{ h.RoomNo }}</div>
+                  <span class="name-text">{{ h.FamilyName || "(表記なし)" }}</span>
                 </button>
               </td>
               <td>
                 <div class="small">{{ houseAddress(h) }}</div>
+              </td>
+              <td>
+                <button type="button" class="btn btn-link p-0 text-start" @click.stop="openHouseInfoModal(h)">
+                  <span v-if="buildingIconClass(h.BuildingCategory)" class="me-1 text-secondary">
+                    <i class="fas" :class="buildingIconClass(h.BuildingCategory)"></i>
+                  </span>
+                  <span class="small">{{ h.BuildingName }} {{ h.RoomNo }}</span>
+                </button>
               </td>
               <td class="text-center">
                 <span :class="statusPillClass(displayStatus(h))">{{ displayStatus(h) }}</span>
@@ -158,8 +166,8 @@
               <div>
                 <span class="fw-bold me-2">#{{ h.HousingNo }}</span>
                 <i v-if="h.NGFlag === '不可'" class="fas fa-ban text-danger me-1" title="訪問不可"></i>
-                <span v-if="buildingIconClass(h)" class="me-1 text-secondary">
-                  <i class="fas" :class="buildingIconClass(h)"></i>
+                <span v-if="buildingIconClass(h.BuildingCategory)" class="me-1 text-secondary">
+                  <i class="fas" :class="buildingIconClass(h.BuildingCategory)"></i>
                 </span>
                 <button type="button" class="btn btn-link p-0" @click.stop="openHouseInfoModal(h)">
                   {{ h.FamilyName || "(表記なし)" }}
@@ -258,6 +266,7 @@ import { isChildOffline, getOfflineChild, findOfflineEntryByCard, isOnline } fro
 import VisitModal from "@/components/VisitModal.vue";
 import HouseInfoModal from "@/components/HouseInfoModal.vue";
 import OfflineSyncDialog from "@/components/OfflineSyncDialog.vue";
+import { buildingIconClass } from "@/utils/buildingIcons.js";
 
 const props = defineProps({
   cardNo:  { type: Number, required: true },
@@ -275,6 +284,8 @@ const statusFilter   = ref("");
 const focusedHousing = ref(null);
 const mapContainer   = ref(null);
 const mapVisible     = ref(true);
+const headerEl       = ref(null);
+const headerHeight   = ref(64);
 const showModal      = ref(false);
 const selectedHouse  = ref(null);
 const modalMode      = ref("add"); // 'add' | 'history'
@@ -382,20 +393,6 @@ function rawVisitStatus(h) {
 function displayStatus(h) {
   if (h.NGFlag === "不可") return rawVisitStatus(h);
   return h.VisitStatus || "未訪問";
-}
-
-// 建物種別に応じたアイコンクラス（ORIGINAL/ChildMap.htmlのBuildingCategory分岐を踏襲）
-const BUILDING_ICONS = {
-  "店舗":     "fa-store",
-  "工場":     "fa-industry",
-  "倉庫":     "fa-warehouse",
-  "事務所":   "fa-building",
-  "各種施設": "fa-building",
-  "駐車場":   "fa-parking",
-  "空地":     "fa-stop-circle",
-};
-function buildingIconClass(h) {
-  return BUILDING_ICONS[h.BuildingCategory] || null;
 }
 
 // 住戸リスト側からの選択：該当ピンを強調表示し、地図を移動して吹き出しを開く
@@ -566,7 +563,16 @@ async function initMap() {
   }
 }
 
+// 住戸一覧スクロール中も地図を固定表示するため、ヘッダーの実高さを地図ラッパーのtopに反映する
+function updateHeaderHeight() {
+  headerHeight.value = headerEl.value?.offsetHeight || 64;
+}
+
 onMounted(async () => {
+  await nextTick();
+  updateHeaderHeight();
+  window.addEventListener("resize", updateHeaderHeight);
+
   try {
     if (!isOnline()) throw new Error("offline");
     const res = await getChildDetail(props.cardNo, props.childNo);
@@ -602,6 +608,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  window.removeEventListener("resize", updateHeaderHeight);
   if (kmlLayer) kmlLayer.setMap(null);
   if (infoWindow) infoWindow.close();
   markers.forEach(m => { if (m.map) m.map = null; });
@@ -641,12 +648,23 @@ onUnmounted(() => {
 
 .col-id       { width: 48px;  text-align: center; }
 .col-ng       { width: 40px;  text-align: center; }
-.col-name     { width: 180px; }
-.col-address  { min-width: 100px; }
+.col-name,
+.col-address,
+.col-building { width: 20%; }
 .col-status   { width: 110px; text-align: center; }
 .col-lastvisit { width: 100px; text-align: center; }
 .col-result   { width: 90px;  text-align: center; }
 .col-history  { width: 60px;  text-align: center; }
+
+.name-text {
+  font-size: calc(1rem + 4pt);
+}
+
+.map-sticky-wrapper {
+  position: sticky;
+  z-index: 10;
+  background: #fff;
+}
 
 .offline-pill {
   background-color: #6f42c1;

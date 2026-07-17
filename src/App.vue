@@ -14,25 +14,22 @@
 </template>
 
 <script setup>
-import { watch } from "vue";
+import { onMounted, onUnmounted } from "vue";
 import { useAuthStore } from "@/store/authStore.js";
-import { useOnlineStatus } from "@/services/offline.js";
 
 const authStore = useAuthStore();
 
-// オフライン中は、誤ってリロード／タブを閉じてしまうと画面がそのまま
-// 使えなくなる恐れがあるため、ブラウザ標準の確認ダイアログで警告する。
+// リロード／タブを閉じると再ログインが必要になる場合があるため、
+// オンライン・オフラインを問わず常にブラウザ標準の確認ダイアログで警告する。
 function confirmBeforeUnload(e) {
   e.preventDefault();
   e.returnValue = "";
 }
 
-const online = useOnlineStatus();
-watch(online, (isOnline) => {
-  if (isOnline) {
-    window.removeEventListener("beforeunload", confirmBeforeUnload);
-  } else {
-    window.addEventListener("beforeunload", confirmBeforeUnload);
-  }
-}, { immediate: true });
+onMounted(() => {
+  window.addEventListener("beforeunload", confirmBeforeUnload);
+});
+onUnmounted(() => {
+  window.removeEventListener("beforeunload", confirmBeforeUnload);
+});
 </script>
