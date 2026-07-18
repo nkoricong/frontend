@@ -41,11 +41,17 @@
 
     <!-- 初回のみ：detailテーブルの建物情報を建物マスタへ移行 -->
     <div v-if="!loading && buildings.length === 0" class="px-2 mb-3">
-      <div class="alert alert-warning d-flex justify-content-between align-items-center">
-        <span>建物マスタがまだ空です。既存の住戸データから建物情報を移行できます。</span>
-        <button class="btn btn-warning" @click="runBackfill" :disabled="busy">
-          初回のみ：住戸データから移行
-        </button>
+      <div class="alert alert-warning">
+        <div class="d-flex justify-content-between align-items-center">
+          <span v-if="!backfillRunning">建物マスタがまだ空です。既存の住戸データから建物情報を移行できます。</span>
+          <span v-else>住戸データを取得中... （{{ backfillProgress }}件処理済み）</span>
+          <button class="btn btn-warning" @click="runBackfill" :disabled="busy">
+            初回のみ：住戸データから移行
+          </button>
+        </div>
+        <div v-if="backfillRunning" class="progress mt-2" style="height:6px;">
+          <div class="progress-bar" role="progressbar" style="width:100%"></div>
+        </div>
       </div>
     </div>
 
@@ -277,7 +283,8 @@ import {
   getBuildingMasterList,
   upsertBuildingMaster,
   deleteBuildingMaster,
-  backfillBuildingMasterFromDetail,
+  fetchDetailBuildingPage,
+  commitBuildingMasterBackfill,
   getKibanTowns,
   getKibanChoList,
   getKibanBanchiList,
@@ -297,6 +304,10 @@ const showModal  = ref(false);
 const editMode   = ref("add"); // 'add' | 'edit'
 const editForm   = ref({});
 const saveError  = ref("");
+
+const backfillRunning  = ref(false);
+const backfillProgress = ref(0);
+const BACKFILL_PAGE_SIZE = 300;
 
 const BuildKinds = ["戸建て", "長屋", "アパート", "マンション", "オートロック", "寮", "店舗", "事務所", "工場", "倉庫", "各種施設", "駐車場", "空地", "空き家", "その他"];
 const NGStatus    = ["可", "不可"];
@@ -331,22 +342,77 @@ async function fetchBuildings() {
   }
 }
 
+// 「戸建て」や建物名未入力の住戸は、複数住戸で共有される「建物」の概念に
+// 該当しないため、building_master への集約対象から除外する（バックエンドの
+// buildingMasterBackfillService.js の dedupeKey と同じ判定・キー構成）。
+function backfillDedupeKey(d) {
+  if (!d.BuildingName || d.BuildingCategory === "戸建て") return null;
+  return [
+    d.BuildingCategory, d.BuildingName, d.Floors, d.Rooms,
+    d.AddressSW, d.CSVTownName, d.CSVCho, d.CSVBanchi,
+    d.InputTownName, d.InputCho, d.InputBanchi,
+  ].join("|");
+}
+
 async function runBackfill() {
   if (!confirm("既存の住戸データから建物マスタへ一括移行します。この操作は初回のみ実行してください。よろしいですか？")) return;
   busy.value = true;
+  backfillRunning.value = true;
+  backfillProgress.value = 0;
   try {
-    const res = await backfillBuildingMasterFromDetail();
-    if (res.status === "success") {
-      alert(`建物マスタへ ${res.buildingsCreated} 件の建物を作成しました（対象住戸 ${res.detailRowsLinked} 件）。`);
+    // detailを少数ずつページングして取得・復号する（1回のWorker呼び出しあたりの
+    // 復号量を抑えるため）。重複排除・グルーピングは復号済みの値でフロント側が行う。
+    const groups = new Map(); // key -> { rowIds: number[], data }
+    let offset = 0;
+    while (true) {
+      const res = await fetchDetailBuildingPage(offset, BACKFILL_PAGE_SIZE);
+      if (res.status !== "success") {
+        alert(res.message || "移行に失敗しました");
+        return;
+      }
+      for (const d of res.rows) {
+        const key = backfillDedupeKey(d);
+        if (!key) continue;
+        if (!groups.has(key)) groups.set(key, { rowIds: [], data: d });
+        groups.get(key).rowIds.push(d.DetailID);
+      }
+      offset += res.rows.length;
+      backfillProgress.value = offset;
+      if (!res.hasMore) break;
+    }
+
+    const buildingGroups = [...groups.values()].map(({ rowIds, data }) => ({
+      rowIds,
+      payload: {
+        BuildingCategory: data.BuildingCategory,
+        BuildingName:     data.BuildingName,
+        Floors:           data.Floors,
+        Rooms:            data.Rooms,
+        CSVTownName:      data.CSVTownName,
+        CSVCho:           data.CSVCho,
+        CSVBanchi:        data.CSVBanchi,
+        CSVLat:           data.CSVLat,
+        CSVLng:           data.CSVLng,
+        InputTownName:    data.InputTownName,
+        InputCho:         data.InputCho,
+        InputBanchi:      data.InputBanchi,
+        AddressSW:        data.AddressSW,
+      },
+    }));
+
+    const commitRes = await commitBuildingMasterBackfill(buildingGroups);
+    if (commitRes.status === "success") {
+      alert(`建物マスタへ ${commitRes.buildingsCreated} 件の建物を作成しました（対象住戸 ${commitRes.detailRowsLinked} 件）。`);
       await fetchBuildings();
     } else {
-      alert(res.message || "移行に失敗しました");
+      alert(commitRes.message || "移行に失敗しました");
     }
   } catch (e) {
     console.error(e);
     alert("移行に失敗しました");
   } finally {
     busy.value = false;
+    backfillRunning.value = false;
   }
 }
 

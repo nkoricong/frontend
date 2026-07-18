@@ -405,9 +405,17 @@ export async function getKibanNearest(lat, lng) {
   return callWorker({ funcName: "getKibanNearest", lat, lng });
 }
 
-/** detailテーブルの建物情報をbuilding_masterへ一括移行する（初回のみ実行する管理者操作） */
-export async function backfillBuildingMasterFromDetail() {
-  return callWorker({ funcName: "backfillBuildingMasterFromDetail" });
+/**
+ * detailテーブルの建物情報を1ページ分だけ取得・復号する（初回のみ実行する管理者操作）。
+ * 1回のWorker呼び出しでの復号量を抑えるため、フロント側でページングして繰り返し呼び出す。
+ */
+export async function fetchDetailBuildingPage(offset, limit) {
+  return callWorker({ funcName: "fetchDetailBuildingPage", offset, limit });
+}
+
+/** フロント側で重複排除・グルーピング済みの建物候補をbuilding_masterへ書き込む */
+export async function commitBuildingMasterBackfill(buildingGroups) {
+  return callWorker({ funcName: "commitBuildingMasterBackfill", buildingGroups });
 }
 
 // ----------------------------------------------------------------
