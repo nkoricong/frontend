@@ -376,10 +376,13 @@ async function runBackfill() {
   try {
     // detailを少数ずつページングして取得・復号する（1回のWorker呼び出しあたりの
     // 復号量を抑えるため）。重複排除・グルーピングは復号済みの値でフロント側が行う。
+    // offsetではなくDetailID(row_id)によるカーソル方式でページングする
+    // （offset方式はページが深くなるほどcrawlが遅くなり、タイムアウトの原因になるため）。
     const groups = new Map(); // key -> { rowIds: number[], data }
-    let offset = 0;
+    let afterRowId = 0;
+    let processedCount = 0;
     while (true) {
-      const res = await fetchDetailBuildingPage(offset, BACKFILL_PAGE_SIZE);
+      const res = await fetchDetailBuildingPage(afterRowId, BACKFILL_PAGE_SIZE);
       if (res.status !== "success") {
         alert(res.message || "移行に失敗しました");
         return;
@@ -390,8 +393,9 @@ async function runBackfill() {
         if (!groups.has(key)) groups.set(key, { rowIds: [], data: d });
         groups.get(key).rowIds.push(d.DetailID);
       }
-      offset += res.rows.length;
-      backfillProgress.value = offset;
+      processedCount += res.rows.length;
+      afterRowId = res.lastRowId;
+      backfillProgress.value = processedCount;
       if (!res.hasMore) break;
     }
 

@@ -408,9 +408,11 @@ export async function getKibanNearest(lat, lng) {
 /**
  * detailテーブルの建物情報を1ページ分だけ取得・復号する（初回のみ実行する管理者操作）。
  * 1回のWorker呼び出しでの復号量を抑えるため、フロント側でページングして繰り返し呼び出す。
+ * afterRowIdは前回ページの最後のDetailID（row_id）。offsetではなくrow_idによる
+ * カーソル方式のため、ページが深くなっても検索速度が落ちない。
  */
-export async function fetchDetailBuildingPage(offset, limit) {
-  return callWorker({ funcName: "fetchDetailBuildingPage", offset, limit });
+export async function fetchDetailBuildingPage(afterRowId, limit) {
+  return callWorker({ funcName: "fetchDetailBuildingPage", afterRowId, limit });
 }
 
 /** フロント側で重複排除・グルーピング済みの建物候補をbuilding_masterへ書き込む */
