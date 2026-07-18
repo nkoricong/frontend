@@ -159,7 +159,7 @@ function parseCsvLine(line) {
 // （ORIGINAL/シート操作.js の kibanCSVtoJSON と同じ列位置。実データで確認済み）
 function parseCsvText(text) {
   const lines = text.split(/\r\n|\r|\n/).filter(l => l.length > 0);
-  return lines.map(line => {
+  const parsed = lines.map(line => {
     const c = parseCsvLine(line);
     return {
       CityCode: (c[0] ?? "").trim(),
@@ -170,6 +170,17 @@ function parseCsvText(text) {
       Lat:      (c[7] ?? "").trim(),
     };
   }).filter(r => r.Town);
+
+  // 町名マスタは (市区町村コード, 町名, 番地, 号) で一意にしているが、
+  // 実データには同一住所に複数の建物が登録されているケースがあり、
+  // 同一キーの行が1回のupsertコマンドに混在するとPostgreSQLのON CONFLICT
+  // DO UPDATEが「同じ行を2回更新できない」エラーになる。
+  // そのため取り込み前にキー単位で重複排除する（後勝ち）。
+  const dedup = new Map();
+  for (const r of parsed) {
+    dedup.set([r.CityCode, r.Town, r.Cho, r.Banchi].join("|"), r);
+  }
+  return [...dedup.values()];
 }
 
 async function onFileChange(event) {
