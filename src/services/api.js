@@ -330,9 +330,24 @@ export async function renumberDetailList(CardNo, ChildNo) {
   return callWorker({ funcName: "renumberDetailList", CardNo, ChildNo });
 }
 
-/** 住居表示住所CSVを取り込む */
-export async function importKibanCsv({ cardNo, childNo, rows }) {
-  return callWorker({ funcName: "importKibanCsv", cardNo, childNo, rows });
+/** 町名マスタへ住居表示住所CSVの一部（数千行単位）を取り込む */
+export async function importKibanMasterBatch(rows) {
+  return callWorker({ funcName: "importKibanMasterBatch", rows });
+}
+
+/** 町名マスタから町名一覧を取得する（「リストから選択」カスケードの1階層目） */
+export async function getKibanTowns() {
+  return callWorker({ funcName: "getKibanTowns" });
+}
+
+/** 指定した町名の番地一覧を取得する（カスケードの2階層目） */
+export async function getKibanChoList(town) {
+  return callWorker({ funcName: "getKibanChoList", town });
+}
+
+/** 指定した町名・番地の号一覧（+緯度経度）を取得する（カスケードの3階層目） */
+export async function getKibanBanchiList(town, cho) {
+  return callWorker({ funcName: "getKibanBanchiList", town, cho });
 }
 
 // ----------------------------------------------------------------

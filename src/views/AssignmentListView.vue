@@ -153,14 +153,30 @@
                 {{ child.CHILDBLOCK }}
               </h5>
               <div class="d-flex flex-column align-items-end gap-1">
-                <span
-                  class="badge rounded-pill"
-                  :class="{ 'pill-clickable': isReturned(child) && !child.SHARED }"
-                  :style="statusPillStyle(child.CHILDSTATUS)"
-                  @click="isReturned(child) && !child.SHARED && cancelReturn(child)"
-                >
-                  {{ child.CHILDSTATUS }}
-                </span>
+                <div class="d-flex align-items-center gap-1">
+                  <button
+                    v-if="!isReturned(child) && !usingOfflineData && !child.SHARED"
+                    class="btn btn-sm btn-outline-danger"
+                    @click="returnCard(child)"
+                  >
+                    <i class="fas fa-undo"></i> 返却
+                  </button>
+                  <button
+                    v-else-if="!isReturned(child) && !usingOfflineData"
+                    class="btn btn-sm btn-outline-warning"
+                    @click="endShare(child)"
+                  >
+                    <i class="fas fa-share-alt"></i> 共有終了
+                  </button>
+                  <span
+                    class="badge rounded-pill"
+                    :class="{ 'pill-clickable': isReturned(child) && !child.SHARED }"
+                    :style="statusPillStyle(child.CHILDSTATUS)"
+                    @click="isReturned(child) && !child.SHARED && cancelReturn(child)"
+                  >
+                    {{ child.CHILDSTATUS }}
+                  </span>
+                </div>
                 <span
                   v-if="isOfflineChild(child)"
                   class="badge rounded-pill offline-pill pill-clickable"
@@ -182,23 +198,9 @@
                 貸出: {{ child.CHILDCHECKOUTDATE ?? "-" }} ／
                 期限: {{ child.CHILDLIMITDATE ?? "-" }}
               </small>
-              <div v-if="!isReturned(child)" class="d-flex flex-wrap gap-2 justify-content-end">
+              <div class="d-flex flex-wrap gap-2 justify-content-end">
                 <button
-                  v-if="!usingOfflineData && !child.SHARED"
-                  class="btn btn-sm btn-outline-danger"
-                  @click="returnCard(child)"
-                >
-                  <i class="fas fa-undo"></i> 返却
-                </button>
-                <button
-                  v-else-if="!usingOfflineData"
-                  class="btn btn-sm btn-outline-warning"
-                  @click="endShare(child)"
-                >
-                  <i class="fas fa-share-alt"></i> 共有終了
-                </button>
-                <button
-                  v-if="!usingOfflineData && !isOfflineChild(child)"
+                  v-if="!isReturned(child) && !usingOfflineData && !isOfflineChild(child)"
                   class="btn btn-sm btn-outline-secondary"
                   @click="enableOffline(child)"
                 >
