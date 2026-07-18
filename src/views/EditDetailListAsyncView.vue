@@ -125,49 +125,152 @@
               </div>
 
               <div class="col-sm-4">
-                <label class="form-label">建物種別</label>
-                <select class="form-select" v-model="editForm.BuildingCategory">
-                  <option v-for="b in BuildKinds" :key="b" :value="b">{{ b }}</option>
-                </select>
+                <label class="form-label">建物番号（旧・自由入力）</label>
+                <input type="text" class="form-control" v-model="editForm.BuildingNoLegacy">
               </div>
 
-              <div class="col-sm-4">
-                <label class="form-label">建物番号</label>
-                <input type="text" class="form-control" v-model="editForm.BuildingNo">
+              <div class="col-sm-8">
+                <label class="form-label d-block">建物情報の入力方法</label>
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="radio" id="building-sw-master" value="建物マスタから選択" v-model="editForm.BuildingSW">
+                  <label class="form-check-label" for="building-sw-master">建物マスタから選択</label>
+                </div>
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="radio" id="building-sw-input" value="直接入力" v-model="editForm.BuildingSW">
+                  <label class="form-check-label" for="building-sw-input">直接入力</label>
+                </div>
               </div>
 
-              <div class="col-sm-4" v-if="editForm.BuildingCategory !== '戸建て'">
-                <label class="form-label">建物名</label>
-                <input type="text" class="form-control" v-model="editForm.BuildingName">
-              </div>
-
-              <div class="col-sm-4">
-                <label class="form-label">階数</label>
-                <input type="text" class="form-control" v-model="editForm.Floors">
-              </div>
-
-              <div class="col-sm-4">
-                <label class="form-label">部屋数</label>
-                <input type="text" class="form-control" v-model="editForm.Rooms">
-              </div>
+              <template v-if="editForm.BuildingSW === '建物マスタから選択'">
+                <div class="col-sm-12">
+                  <label class="form-label">建物マスタ</label>
+                  <select class="form-select" v-model.number="editForm.BuildingNo" @change="onBuildingMasterChange">
+                    <option :value="null" disabled>-選択-</option>
+                    <option v-for="b in buildingMasterOptions" :key="b.BuildingNo" :value="b.BuildingNo">
+                      {{ b.BuildingNo }}：{{ b.BuildingName }}
+                    </option>
+                  </select>
+                </div>
+                <div class="col-sm-4">
+                  <label class="form-label">建物種別</label>
+                  <div class="d-flex align-items-center gap-2">
+                    <i v-if="buildingIconClass(editForm.BuildingCategory)" class="fas text-secondary" :class="buildingIconClass(editForm.BuildingCategory)"></i>
+                    <input type="text" class="form-control" :value="editForm.BuildingCategory" disabled>
+                  </div>
+                </div>
+                <div class="col-sm-4">
+                  <label class="form-label">建物名</label>
+                  <input type="text" class="form-control" :value="editForm.BuildingName" disabled>
+                </div>
+                <div class="col-sm-2">
+                  <label class="form-label">階数</label>
+                  <input type="text" class="form-control" :value="editForm.Floors" disabled>
+                </div>
+                <div class="col-sm-2">
+                  <label class="form-label">部屋数</label>
+                  <input type="text" class="form-control" :value="editForm.Rooms" disabled>
+                </div>
+              </template>
+              <template v-else>
+                <div class="col-sm-4">
+                  <label class="form-label">建物種別</label>
+                  <div class="d-flex align-items-center gap-2">
+                    <i v-if="buildingIconClass(editForm.BuildingCategory)" class="fas text-secondary" :class="buildingIconClass(editForm.BuildingCategory)"></i>
+                    <select class="form-select" v-model="editForm.BuildingCategory">
+                      <option v-for="b in BuildKinds" :key="b" :value="b">{{ b }}</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="col-sm-4" v-if="editForm.BuildingCategory !== '戸建て'">
+                  <label class="form-label">建物名</label>
+                  <input type="text" class="form-control" v-model="editForm.BuildingName">
+                </div>
+                <div class="col-sm-2">
+                  <label class="form-label">階数</label>
+                  <input type="text" class="form-control" v-model="editForm.Floors">
+                </div>
+                <div class="col-sm-2">
+                  <label class="form-label">部屋数</label>
+                  <input type="text" class="form-control" v-model="editForm.Rooms">
+                </div>
+              </template>
 
               <div class="col-sm-4" v-if="editForm.BuildingCategory !== '戸建て'">
                 <label class="form-label">部屋番号</label>
                 <input type="text" class="form-control" v-model="editForm.RoomNo">
               </div>
 
-              <div class="col-sm-12"><hr><b>住所（参照のみ・kiban CSV連携は未移行）</b></div>
+              <div class="col-sm-12"><hr><b>住所</b></div>
 
-              <div class="col-sm-6">
-                <label class="form-label">町名／番／号（CSV）</label>
-                <input type="text" class="form-control" disabled
-                  :value="`${editForm.CSVTownName || ''}${editForm.CSVCho || ''}${editForm.CSVBanchi || ''}`">
+              <div class="col-sm-12">
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="radio" id="addr-sw-list" value="リストから選択" v-model="editForm.AddressSW">
+                  <label class="form-check-label" for="addr-sw-list">リストから選択</label>
+                </div>
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="radio" id="addr-sw-input" value="直接入力" v-model="editForm.AddressSW">
+                  <label class="form-check-label" for="addr-sw-input">直接入力</label>
+                </div>
               </div>
 
-              <div class="col-sm-6">
-                <label class="form-label">町名／番／号（直接入力）</label>
-                <input type="text" class="form-control" disabled
-                  :value="`${editForm.InputTownName || ''}${editForm.InputCho || ''}${editForm.InputBanchi || ''}`">
+              <template v-if="editForm.AddressSW === '直接入力'">
+                <div class="col-sm-4">
+                  <label class="form-label">町名</label>
+                  <select class="form-select" v-model="editForm.InputTownName">
+                    <option value="" disabled>-選択-</option>
+                    <option v-for="t in townOptions" :key="t" :value="t">{{ t }}</option>
+                  </select>
+                </div>
+                <div class="col-sm-4">
+                  <label class="form-label">番地</label>
+                  <input type="text" class="form-control" v-model="editForm.InputCho">
+                </div>
+                <div class="col-sm-4">
+                  <label class="form-label">号</label>
+                  <input type="text" class="form-control" v-model="editForm.InputBanchi">
+                </div>
+              </template>
+              <template v-else>
+                <div class="col-sm-4">
+                  <label class="form-label">町名</label>
+                  <select class="form-select" v-model="editForm.CSVTownName" @change="onTownChange">
+                    <option value="" disabled>-選択-</option>
+                    <option v-for="t in townOptions" :key="t" :value="t">{{ t }}</option>
+                  </select>
+                </div>
+                <div class="col-sm-4">
+                  <label class="form-label">番地</label>
+                  <select class="form-select" v-model="editForm.CSVCho" @change="onChoChange">
+                    <option value="" disabled>-選択-</option>
+                    <option v-for="c in choOptions" :key="c" :value="c">{{ c }}</option>
+                  </select>
+                </div>
+                <div class="col-sm-4">
+                  <label class="form-label">号</label>
+                  <select class="form-select" v-model="editForm.CSVBanchi" @change="onBanchiChange">
+                    <option value="" disabled>-選択-</option>
+                    <option v-for="b in banchiOptions" :key="b.Banchi" :value="b.Banchi">{{ b.Banchi }}</option>
+                  </select>
+                </div>
+              </template>
+
+              <div class="col-sm-12">
+                <label class="form-label">緯度・経度</label>
+                <div class="d-flex gap-1 mb-1">
+                  <input class="form-control" v-model="editForm.CSVLat" placeholder="緯度　例）34.768660059488724">
+                  <input class="form-control" v-model="editForm.CSVLng" placeholder="経度　例）135.59748150473885">
+                </div>
+                <div class="d-flex gap-2">
+                  <button type="button" class="btn btn-sm btn-outline-secondary" @click="pasteClipboard">
+                    <i class="fas fa-paste"></i> 貼り付け
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary" @click="openMapPicker">
+                    <i class="fas fa-map-marker-alt"></i> 地図で指定
+                  </button>
+                </div>
+                <div class="form-text">
+                  Googleマップアプリで地点を長押し→座標をコピーし、[貼り付け]を押すと自動入力されます。
+                </div>
               </div>
 
               <div class="col-sm-12"><hr><b>電話番号</b></div>
@@ -193,7 +296,7 @@
 
               <div class="col-sm-3">
                 <label class="form-label">可否</label>
-                <select class="form-select" v-model="editForm.NGFlag">
+                <select class="form-select" v-model="editForm.NGFlag" @change="onNgFlagChange">
                   <option v-for="n in NGStatus" :key="n" :value="n">{{ n }}</option>
                 </select>
               </div>
@@ -238,6 +341,7 @@
               </div>
 
             </div>
+            <p v-if="saveError" class="text-danger small mt-2 mb-0">{{ saveError }}</p>
           </div>
 
           <div class="modal-footer">
@@ -245,6 +349,19 @@
             <button class="btn btn-primary" @click="saveForm" :disabled="busy">
               {{ editMode === "edit" ? "更新" : "登録" }}
             </button>
+          </div>
+
+          <!-- 地図で地点を指定するミニマップ -->
+          <div v-if="showMapPicker" class="map-picker-overlay">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <strong class="small">地図をクリックして地点を指定してください</strong>
+              <button type="button" class="btn-close" @click="closeMapPicker"></button>
+            </div>
+            <div ref="pickerMapContainer" class="picker-map"></div>
+            <div class="d-flex justify-content-end gap-2 mt-2">
+              <button type="button" class="btn btn-sm btn-secondary" @click="closeMapPicker">キャンセル</button>
+              <button type="button" class="btn btn-sm btn-primary" @click="confirmMapPicker">この地点に決定</button>
+            </div>
           </div>
 
         </div>
@@ -255,14 +372,22 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, nextTick } from "vue";
 import { useRouter } from "vue-router";
+import { useAuthStore } from "@/store/authStore.js";
+import { buildingIconClass } from "@/utils/buildingIcons.js";
+import { loadGoogleMaps, createMap, addMarker } from "@/services/maps.js";
 import {
   getChildDetail,
   upsertDetail,
   deleteDetail,
   moveDetailRow,
   renumberDetailList,
+  searchBuildingMaster,
+  getKibanTowns,
+  getKibanChoList,
+  getKibanBanchiList,
+  getKibanNearest,
 } from "@/services/api.js";
 
 const props = defineProps({
@@ -270,11 +395,14 @@ const props = defineProps({
   childNo: { type: Number, required: true },
 });
 
-const router = useRouter();
+const router    = useRouter();
+const authStore = useAuthStore();
+const DEFAULT_MAP_CENTER = { lat: 35.6812, lng: 139.7671 };
 
 const loading = ref(true);
 const busy    = ref(false);
 const houses  = ref([]);
+const saveError = ref("");
 
 const showModal = ref(false);
 const editMode  = ref("add"); // 'add' | 'copy' | 'edit'
@@ -299,7 +427,9 @@ function blankForm() {
     CardNo:   props.cardNo,
     ChildNo:  props.childNo,
     Type:     "家から家",
-    BuildingNo: "",
+    BuildingNoLegacy: "",
+    BuildingSW: "直接入力",
+    BuildingNo: null,
     BuildingCategory: "戸建て",
     BuildingName: "",
     Floors: "",
@@ -314,6 +444,8 @@ function blankForm() {
     CSVTownName: "",
     CSVCho: "",
     CSVBanchi: "",
+    CSVLat: "",
+    CSVLng: "",
     InputTownName: "",
     InputCho: "",
     InputBanchi: "",
@@ -321,6 +453,7 @@ function blankForm() {
     NGFlag: "可",
     NGDate: "",
     NGComment: "",
+    NGSarvant: "",
     NGChecked: "未確認",
     YoungerGENFlag: "",
     Description: "",
@@ -340,17 +473,23 @@ async function fetchHouses() {
   }
 }
 
-function openAddModal() {
+async function openAddModal() {
   editMode.value = "add";
   editForm.value = blankForm();
+  saveError.value = "";
   showModal.value = true;
+  await ensureTownsLoaded();
+  await ensureBuildingMasterLoaded();
 }
 
-function openCopyModal(h) {
+async function openCopyModal(h) {
   editMode.value = "copy";
+  saveError.value = "";
   editForm.value = {
     ...blankForm(),
     Type: h.Type,
+    BuildingNoLegacy: h.BuildingNoLegacy,
+    BuildingSW: h.BuildingNo ? "建物マスタから選択" : "直接入力",
     BuildingNo: h.BuildingNo,
     BuildingCategory: h.BuildingCategory,
     BuildingName: h.BuildingName,
@@ -360,33 +499,57 @@ function openCopyModal(h) {
     CSVTownName: h.CSVTownName,
     CSVCho: h.CSVCho,
     CSVBanchi: h.CSVBanchi,
+    CSVLat: h.CSVLat,
+    CSVLng: h.CSVLng,
     InputTownName: h.InputTownName,
     InputCho: h.InputCho,
     InputBanchi: h.InputBanchi,
     AddressSW: h.AddressSW,
   };
   showModal.value = true;
+  await ensureTownsLoaded();
+  await ensureBuildingMasterLoaded();
+  if (editForm.value.CSVTownName) await loadChoOptions(editForm.value.CSVTownName);
+  if (editForm.value.CSVTownName && editForm.value.CSVCho) await loadBanchiOptions(editForm.value.CSVTownName, editForm.value.CSVCho);
 }
 
-function openEditModal(h) {
+async function openEditModal(h) {
   editMode.value = "edit";
-  editForm.value = { ...h };
+  editForm.value = {
+    ...h,
+    BuildingSW: h.BuildingNo ? "建物マスタから選択" : "直接入力",
+  };
+  // 既にNGFlagが「不可」なのに記録日が未設定の既存データは、本日日付を初期表示する
+  if (editForm.value.NGFlag === "不可" && !editForm.value.NGDate) {
+    editForm.value.NGDate = new Date().toISOString().slice(0, 10);
+  }
+  saveError.value = "";
   showModal.value = true;
+  await ensureTownsLoaded();
+  await ensureBuildingMasterLoaded();
+  if (editForm.value.CSVTownName) await loadChoOptions(editForm.value.CSVTownName);
+  if (editForm.value.CSVTownName && editForm.value.CSVCho) await loadBanchiOptions(editForm.value.CSVTownName, editForm.value.CSVCho);
 }
 
 function closeModal() {
   showModal.value = false;
+  closeMapPicker();
 }
 
 async function saveForm() {
   busy.value = true;
+  saveError.value = "";
   try {
-    await upsertDetail(editForm.value);
-    showModal.value = false;
-    await fetchHouses();
+    const res = await upsertDetail(editForm.value);
+    if (res.status === "success") {
+      showModal.value = false;
+      await fetchHouses();
+    } else {
+      saveError.value = res.message || "保存に失敗しました";
+    }
   } catch (e) {
     console.error(e);
-    alert("保存に失敗しました");
+    saveError.value = e.message || "保存に失敗しました";
   } finally {
     busy.value = false;
   }
@@ -431,6 +594,167 @@ async function renumberIds() {
   }
 }
 
+// ---- 町名マスタ（kiban_master）由来の住所カスケード選択肢 ----
+const townOptions = ref([]);
+let townsLoaded = false;
+const choOptions    = ref([]);
+const banchiOptions = ref([]);
+
+async function ensureTownsLoaded() {
+  if (townsLoaded) return;
+  townsLoaded = true;
+  try {
+    const res = await getKibanTowns();
+    if (res.status === "success") townOptions.value = res.towns || [];
+  } catch (e) {
+    console.error("町名一覧の取得に失敗しました:", e);
+  }
+}
+
+async function loadChoOptions(town) {
+  choOptions.value = [];
+  if (!town) return;
+  try {
+    const res = await getKibanChoList(town);
+    if (res.status === "success") choOptions.value = res.choList || [];
+  } catch (e) {
+    console.error("番地一覧の取得に失敗しました:", e);
+  }
+}
+
+async function loadBanchiOptions(town, cho) {
+  banchiOptions.value = [];
+  if (!town) return;
+  try {
+    const res = await getKibanBanchiList(town, cho);
+    if (res.status === "success") banchiOptions.value = res.banchiList || [];
+  } catch (e) {
+    console.error("号一覧の取得に失敗しました:", e);
+  }
+}
+
+async function onTownChange() {
+  editForm.value.CSVCho    = "";
+  editForm.value.CSVBanchi = "";
+  await loadChoOptions(editForm.value.CSVTownName);
+}
+async function onChoChange() {
+  editForm.value.CSVBanchi = "";
+  await loadBanchiOptions(editForm.value.CSVTownName, editForm.value.CSVCho);
+}
+function onBanchiChange() {
+  const b = banchiOptions.value.find(b => b.Banchi === editForm.value.CSVBanchi);
+  if (b) {
+    if (b.Lat != null) editForm.value.CSVLat = b.Lat;
+    if (b.Lng != null) editForm.value.CSVLng = b.Lng;
+  }
+}
+
+// ---- 建物マスタ（building_master）から選択 ----
+const buildingMasterOptions = ref([]);
+let buildingMasterLoaded = false;
+
+async function ensureBuildingMasterLoaded() {
+  if (buildingMasterLoaded) return;
+  buildingMasterLoaded = true;
+  try {
+    const res = await searchBuildingMaster("");
+    if (res.status === "success") buildingMasterOptions.value = res.buildings || [];
+  } catch (e) {
+    console.error("建物マスタの取得に失敗しました:", e);
+  }
+}
+
+function onBuildingMasterChange() {
+  const b = buildingMasterOptions.value.find(b => b.BuildingNo === editForm.value.BuildingNo);
+  if (b) {
+    editForm.value.BuildingCategory = b.BuildingCategory;
+    editForm.value.BuildingName     = b.BuildingName;
+    editForm.value.Floors           = b.Floors;
+    editForm.value.Rooms            = b.Rooms;
+  }
+}
+
+// NGFlagが「可」→「不可」に変わった時点（新規のNG登録）に、記録日・記録者を自動セットする
+function onNgFlagChange() {
+  if (editForm.value.NGFlag === "不可") {
+    if (!editForm.value.NGDate) editForm.value.NGDate = new Date().toISOString().slice(0, 10);
+    editForm.value.NGSarvant = authStore.userName;
+    editForm.value.NGChecked = "未確認";
+  }
+}
+
+// クリップボードから「緯度, 経度」形式の文字列を読み取り緯度経度欄に反映する
+// （Googleマップアプリで地点を長押しコピーした際の書式。前後の括弧は許容する）
+async function pasteClipboard() {
+  try {
+    const text = (await navigator.clipboard.readText() || "").trim();
+    const cleaned = text.replace(/^\(/, "").replace(/\)$/, "").trim();
+    const commaIdx = cleaned.search(/,/);
+    if (commaIdx !== -1) {
+      editForm.value.CSVLat = cleaned.slice(0, commaIdx).trim();
+      editForm.value.CSVLng = cleaned.slice(commaIdx + 1).trim();
+    } else if (cleaned) {
+      editForm.value.CSVLat = cleaned;
+    }
+  } catch (e) {
+    alert("クリップボードから読み取れませんでした：" + e.message);
+  }
+}
+
+// ---- 地図で地点を指定 ----
+const showMapPicker = ref(false);
+const pickerMapContainer = ref(null);
+let pickerMapInstance = null;
+let pickerMarker = null;
+
+async function openMapPicker() {
+  showMapPicker.value = true;
+  await nextTick();
+  try {
+    await loadGoogleMaps();
+    const center = (editForm.value.CSVLat && editForm.value.CSVLng)
+      ? { lat: Number(editForm.value.CSVLat), lng: Number(editForm.value.CSVLng) }
+      : DEFAULT_MAP_CENTER;
+    pickerMapInstance = createMap(pickerMapContainer.value, center, 17);
+    pickerMarker = addMarker(pickerMapInstance, center, "");
+    pickerMapInstance.addListener("click", (e) => {
+      pickerMarker.setPosition(e.latLng);
+    });
+  } catch (e) {
+    console.error("地図の初期化に失敗しました:", e);
+  }
+}
+
+// ピン確定地点に最も近い町名マスタの住所を自動セットする（#97）
+async function confirmMapPicker() {
+  if (pickerMarker) {
+    const pos = pickerMarker.getPosition();
+    editForm.value.CSVLat = pos.lat();
+    editForm.value.CSVLng = pos.lng();
+    try {
+      const res = await getKibanNearest(pos.lat(), pos.lng());
+      if (res.status === "success" && res.nearest) {
+        editForm.value.AddressSW   = "リストから選択";
+        editForm.value.CSVTownName = res.nearest.Town;
+        editForm.value.CSVCho      = res.nearest.Cho;
+        editForm.value.CSVBanchi   = res.nearest.Banchi;
+        await loadChoOptions(editForm.value.CSVTownName);
+        await loadBanchiOptions(editForm.value.CSVTownName, editForm.value.CSVCho);
+      }
+    } catch (e) {
+      console.error("最寄り住所の取得に失敗しました:", e);
+    }
+  }
+  closeMapPicker();
+}
+
+function closeMapPicker() {
+  showMapPicker.value = false;
+  pickerMapInstance = null;
+  pickerMarker = null;
+}
+
 onMounted(fetchHouses);
 </script>
 
@@ -454,5 +778,22 @@ onMounted(fetchHouses);
 
 .modal {
   z-index: 1050;
+}
+
+.modal-content {
+  position: relative;
+}
+.map-picker-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.98);
+  z-index: 20;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+}
+.picker-map {
+  flex: 1;
+  min-height: 260px;
 }
 </style>

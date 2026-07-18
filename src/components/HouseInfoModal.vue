@@ -216,7 +216,7 @@
 
 <script setup>
 import { ref, computed, watch, nextTick } from "vue";
-import { upsertDetail, getKibanTowns, getKibanChoList, getKibanBanchiList } from "@/services/api.js";
+import { upsertDetail, getKibanTowns, getKibanChoList, getKibanBanchiList, getKibanNearest } from "@/services/api.js";
 import { useAuthStore } from "@/store/authStore.js";
 import { buildingIconClass } from "@/utils/buildingIcons.js";
 import { loadGoogleMaps, createMap, addMarker } from "@/services/maps.js";
@@ -384,11 +384,26 @@ async function openMapPicker() {
   }
 }
 
-function confirmMapPicker() {
+async function confirmMapPicker() {
   if (pickerMarker) {
     const pos = pickerMarker.getPosition();
     form.value.CSVLat = pos.lat();
     form.value.CSVLng = pos.lng();
+    // ピン確定地点に最も近い町名マスタの住所を自動セットする（#97）
+    try {
+      const res = await getKibanNearest(pos.lat(), pos.lng());
+      if (res.status === "success" && res.nearest) {
+        form.value.AddressSW    = "リストから選択";
+        form.value.CSVTownName  = res.nearest.Town;
+        form.value.CSVCho       = res.nearest.Cho;
+        form.value.CSVBanchi    = res.nearest.Banchi;
+        await ensureTownsLoaded();
+        await loadChoOptions(form.value.CSVTownName);
+        await loadBanchiOptions(form.value.CSVTownName, form.value.CSVCho);
+      }
+    } catch (e) {
+      console.error("最寄り住所の取得に失敗しました:", e);
+    }
   }
   closeMapPicker();
 }

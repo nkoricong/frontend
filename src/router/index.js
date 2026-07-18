@@ -96,6 +96,11 @@ const routes = [
     component: () => import("@/views/ImportKibanCSVView.vue"),
   },
   {
+    path:      "/settings/building-master",
+    name:      "buildingMasterList",
+    component: () => import("@/views/BuildingMasterListView.vue"),
+  },
+  {
     path:      "/settings/announcements",
     name:      "editAnnouncementList",
     component: () => import("@/views/AnnouncementEditListView.vue"),

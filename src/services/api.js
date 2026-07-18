@@ -336,6 +336,30 @@ export async function renumberDetailList(CardNo, ChildNo) {
   return callWorker({ funcName: "renumberDetailList", CardNo, ChildNo });
 }
 
+// ----------------------------------------------------------------
+// 建物マスタの編集
+// ----------------------------------------------------------------
+
+/** 建物マスタ一覧を取得する */
+export async function getBuildingMasterList() {
+  return callWorker({ funcName: "getBuildingMasterList" });
+}
+
+/** 建物マスタを軽量検索する（住戸編集画面の「建物マスタから選択」ドロップダウン用） */
+export async function searchBuildingMaster(keyword) {
+  return callWorker({ funcName: "searchBuildingMaster", keyword });
+}
+
+/** 建物マスタを作成/更新する */
+export async function upsertBuildingMaster(record) {
+  return callWorker({ funcName: "upsertBuildingMaster", ...record });
+}
+
+/** 建物マスタを削除する */
+export async function deleteBuildingMaster(buildingNo) {
+  return callWorker({ funcName: "deleteBuildingMaster", BuildingNo: buildingNo });
+}
+
 /** 町名マスタを全件削除する（「総入替」モードの1段目） */
 export async function clearKibanMaster() {
   return callWorker({ funcName: "clearKibanMaster" });
@@ -374,6 +398,16 @@ export async function getKibanChoList(town) {
 /** 指定した町名・番地の号一覧（+緯度経度）を取得する（カスケードの3階層目） */
 export async function getKibanBanchiList(town, cho) {
   return callWorker({ funcName: "getKibanBanchiList", town, cho });
+}
+
+/** 指定した緯度経度に最も近い町名マスタの行（町名・番地・号）を取得する（逆ジオコーディング） */
+export async function getKibanNearest(lat, lng) {
+  return callWorker({ funcName: "getKibanNearest", lat, lng });
+}
+
+/** detailテーブルの建物情報をbuilding_masterへ一括移行する（初回のみ実行する管理者操作） */
+export async function backfillBuildingMasterFromDetail() {
+  return callWorker({ funcName: "backfillBuildingMasterFromDetail" });
 }
 
 // ----------------------------------------------------------------

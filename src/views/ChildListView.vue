@@ -68,7 +68,7 @@
     <!-- カード一覧 -->
     <div class="row g-3">
       <div class="col-12 col-sm-6" v-for="child in filteredCards" :key="child.CHILDID">
-        <div class="card shadow-sm h-100">
+        <div class="card shadow-sm h-100" :class="{ 'card-past-limit': isPastLimit(child) }">
           <div class="card-body" role="button" @click="openChildMap(child)">
 
             <div class="d-flex justify-content-between align-items-start mb-1">
@@ -267,6 +267,12 @@ function isOverdue(child) {
   return child.CHILDSTATUS === "貸出中" && child.CHILDLIMITDATE < new Date().toISOString().slice(0, 10);
 }
 
+// ステータスに関わらず、使用期限を過ぎたカードを一覧で薄く表示するための判定
+function isPastLimit(child) {
+  if (!child.CHILDLIMITDATE) return false;
+  return child.CHILDLIMITDATE < new Date().toISOString().slice(0, 10);
+}
+
 // 親カード（区域カード）の使用期限日より子カードの使用期限日の方が後になっている場合に警告表示する
 function isParentLimitBeforeChild(child) {
   return !!(child.CARDLIMITDATE && child.CHILDLIMITDATE && child.CARDLIMITDATE < child.CHILDLIMITDATE);
@@ -457,5 +463,10 @@ onMounted(fetchData);
   margin-right: 6px;
   font-size: 14px;
   color: #212529;
+}
+
+.card-past-limit {
+  background-color: #e9ecef;
+  opacity: 0.85;
 }
 </style>

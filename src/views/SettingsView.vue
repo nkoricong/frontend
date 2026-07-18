@@ -41,6 +41,9 @@
         <button class="btn alert-secondary col-12 text-left mb-3" @click="router.push({ name: 'importKibanCSV' })">
           <h5 class="mb-0"><i class="fas fa-file-csv"></i> 住居表示住所CSVインポート</h5>
         </button>
+        <button class="btn alert-secondary col-12 text-left mb-3" @click="router.push({ name: 'buildingMasterList' })">
+          <h5 class="mb-0"><i class="fas fa-building"></i> 建物マスタの編集</h5>
+        </button>
         <button class="btn alert-secondary col-12 text-left mb-3" @click="router.push({ name: 'editAnnouncementList' })">
           <h5 class="mb-0"><i class="far fa-newspaper"></i> お知らせの投稿</h5>
         </button>
