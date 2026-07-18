@@ -106,87 +106,132 @@
             </tr>
           </thead>
           <tbody>
-            <tr
-              v-for="h in filteredHouses"
-              :key="h.DetailID"
-              :data-housing="h.HousingNo"
-              :class="{ 'table-warning': focusedHousing === h.HousingNo }"
-              @click="focusHouse(h)"
-              style="cursor:pointer"
-            >
-              <td class="text-center fw-bold">{{ h.HousingNo }}</td>
-              <td class="text-center">
-                <i v-if="h.NGFlag === '不可'" class="fas fa-ban text-danger" title="訪問不可"></i>
-              </td>
-              <td>
-                <button type="button" class="btn btn-link p-0 text-start" @click.stop="openHouseInfoModal(h)">
-                  <span class="name-text">{{ h.FamilyName || "(表記なし)" }}</span>
-                </button>
-              </td>
-              <td>
-                <div class="small">{{ houseAddress(h) }}</div>
-              </td>
-              <td>
-                <button type="button" class="btn btn-link p-0 text-start" @click.stop="openHouseInfoModal(h)">
-                  <span v-if="buildingIconClass(h.BuildingCategory)" class="me-1 text-secondary">
-                    <i class="fas" :class="buildingIconClass(h.BuildingCategory)"></i>
+            <template v-for="row in visibleRows" :key="row.kind === 'building' ? 'b-' + row.key : row.house.DetailID">
+              <!-- 建物ヘッダー行：結果入力／履歴ボタンは付けない -->
+              <tr v-if="row.kind === 'building'" class="table-light building-row" style="cursor:pointer" @click="toggleGroup(row.key)">
+                <td class="text-center">
+                  <i class="fas" :class="expandedGroups[row.key] ? 'fa-caret-up' : 'fa-caret-down'"></i>
+                </td>
+                <td></td>
+                <td>
+                  <span v-if="buildingIconClass(row.houses[0].BuildingCategory)" class="me-1 text-secondary">
+                    <i class="fas" :class="buildingIconClass(row.houses[0].BuildingCategory)"></i>
                   </span>
-                  <span class="small">{{ h.BuildingName }} {{ h.RoomNo }}</span>
-                </button>
-              </td>
-              <td class="text-center">
-                <span :class="statusPillClass(displayStatus(h))">{{ displayStatus(h) }}</span>
-              </td>
-              <td class="text-center small">{{ latestVisitDate(h) }}</td>
-              <td class="text-center small">
-                <button class="btn btn-sm btn-outline-primary" @click.stop="openAddModal(h)">結果入力</button>
-              </td>
-              <td class="text-center">
-                <button class="btn btn-sm btn-outline-secondary" @click.stop="openHistoryModal(h)" title="履歴">
-                  <i class="fas fa-history"></i>
-                </button>
-              </td>
-            </tr>
+                  <b>{{ row.houses[0].BuildingName }}</b>
+                  <span class="small text-muted ms-1">（{{ row.houses.length }}件）</span>
+                </td>
+                <td><div class="small">{{ houseAddress(row.houses[0]) }}</div></td>
+                <td class="small text-muted">階数 {{ row.houses[0].Floors || "-" }} ／ 部屋数 {{ row.houses[0].Rooms || "-" }}</td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+              </tr>
+
+              <!-- 住戸行（通常どおりの表示。建物配下のときは少しインデントする） -->
+              <tr
+                v-else
+                :data-housing="row.house.HousingNo"
+                :class="{ 'table-warning': focusedHousing === row.house.HousingNo }"
+                @click="focusHouse(row.house)"
+                style="cursor:pointer"
+              >
+                <td class="text-center fw-bold">
+                  <span v-if="row.grouped" class="text-muted me-1">└</span>{{ row.house.HousingNo }}
+                </td>
+                <td class="text-center">
+                  <i v-if="row.house.NGFlag === '不可'" class="fas fa-ban text-danger" title="訪問不可"></i>
+                </td>
+                <td>
+                  <button type="button" class="btn btn-link p-0 text-start" @click.stop="openHouseInfoModal(row.house)">
+                    <span class="name-text">{{ row.house.FamilyName || "(表記なし)" }}</span>
+                  </button>
+                </td>
+                <td>
+                  <div class="small">{{ houseAddress(row.house) }}</div>
+                </td>
+                <td>
+                  <button type="button" class="btn btn-link p-0 text-start" @click.stop="openHouseInfoModal(row.house)">
+                    <span v-if="buildingIconClass(row.house.BuildingCategory)" class="me-1 text-secondary">
+                      <i class="fas" :class="buildingIconClass(row.house.BuildingCategory)"></i>
+                    </span>
+                    <span class="small">{{ row.house.BuildingName }} {{ row.house.RoomNo }}</span>
+                  </button>
+                </td>
+                <td class="text-center">
+                  <span :class="statusPillClass(displayStatus(row.house))">{{ displayStatus(row.house) }}</span>
+                </td>
+                <td class="text-center small">{{ latestVisitDate(row.house) }}</td>
+                <td class="text-center small">
+                  <button class="btn btn-sm btn-outline-primary" @click.stop="openAddModal(row.house)">結果入力</button>
+                </td>
+                <td class="text-center">
+                  <button class="btn btn-sm btn-outline-secondary" @click.stop="openHistoryModal(row.house)" title="履歴">
+                    <i class="fas fa-history"></i>
+                  </button>
+                </td>
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>
 
       <!-- カード形式（スマホ） -->
       <div class="d-md-none">
-        <div
-          v-for="h in filteredHouses"
-          :key="h.DetailID"
-          :data-housing="h.HousingNo"
-          class="card card-house mb-2"
-          :class="{ 'focused-house': focusedHousing === h.HousingNo }"
-          @click="focusHouse(h)"
-        >
-          <div class="card-body py-2 px-3">
-            <div class="d-flex justify-content-between align-items-center">
-              <div>
-                <span class="fw-bold me-2">#{{ h.HousingNo }}</span>
-                <i v-if="h.NGFlag === '不可'" class="fas fa-ban text-danger me-1" title="訪問不可"></i>
-                <span v-if="buildingIconClass(h.BuildingCategory)" class="me-1 text-secondary">
-                  <i class="fas" :class="buildingIconClass(h.BuildingCategory)"></i>
-                </span>
-                <button type="button" class="btn btn-link p-0" @click.stop="openHouseInfoModal(h)">
-                  {{ h.FamilyName || "(表記なし)" }}
-                </button>
-                <div class="small text-muted">{{ h.BuildingName }} {{ h.RoomNo }}</div>
-                <div class="small text-muted">最新訪問日: {{ latestVisitDate(h) }}</div>
-              </div>
-              <div class="d-flex align-items-center gap-2">
-                <span :class="statusPillClass(displayStatus(h))" style="font-size:14px;">
-                  {{ displayStatus(h) }}
-                </span>
-                <button class="btn btn-sm btn-outline-primary" @click.stop="openAddModal(h)">結果入力</button>
-                <button class="btn btn-sm btn-outline-secondary" @click.stop="openHistoryModal(h)" title="履歴">
-                  <i class="fas fa-history"></i>
-                </button>
+        <template v-for="row in visibleRows" :key="row.kind === 'building' ? 'b-' + row.key : row.house.DetailID">
+          <!-- 建物ヘッダーカード：結果入力／履歴ボタンは付けない -->
+          <div v-if="row.kind === 'building'" class="card card-house mb-2 building-row" @click="toggleGroup(row.key)">
+            <div class="card-body py-2 px-3">
+              <div class="d-flex justify-content-between align-items-center">
+                <div>
+                  <i class="fas me-2" :class="expandedGroups[row.key] ? 'fa-caret-up' : 'fa-caret-down'"></i>
+                  <span v-if="buildingIconClass(row.houses[0].BuildingCategory)" class="me-1 text-secondary">
+                    <i class="fas" :class="buildingIconClass(row.houses[0].BuildingCategory)"></i>
+                  </span>
+                  <b>{{ row.houses[0].BuildingName }}</b>
+                  <span class="small text-muted ms-1">（{{ row.houses.length }}件）</span>
+                  <div class="small text-muted">{{ houseAddress(row.houses[0]) }}</div>
+                  <div class="small text-muted">階数 {{ row.houses[0].Floors || "-" }} ／ 部屋数 {{ row.houses[0].Rooms || "-" }}</div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+
+          <!-- 住戸カード（通常どおりの表示） -->
+          <div
+            v-else
+            :data-housing="row.house.HousingNo"
+            class="card card-house mb-2"
+            :class="{ 'focused-house': focusedHousing === row.house.HousingNo, 'ms-3': row.grouped }"
+            @click="focusHouse(row.house)"
+          >
+            <div class="card-body py-2 px-3">
+              <div class="d-flex justify-content-between align-items-center">
+                <div>
+                  <span class="fw-bold me-2">#{{ row.house.HousingNo }}</span>
+                  <i v-if="row.house.NGFlag === '不可'" class="fas fa-ban text-danger me-1" title="訪問不可"></i>
+                  <span v-if="buildingIconClass(row.house.BuildingCategory)" class="me-1 text-secondary">
+                    <i class="fas" :class="buildingIconClass(row.house.BuildingCategory)"></i>
+                  </span>
+                  <button type="button" class="btn btn-link p-0" @click.stop="openHouseInfoModal(row.house)">
+                    {{ row.house.FamilyName || "(表記なし)" }}
+                  </button>
+                  <div class="small text-muted">{{ row.house.BuildingName }} {{ row.house.RoomNo }}</div>
+                  <div class="small text-muted">最新訪問日: {{ latestVisitDate(row.house) }}</div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                  <span :class="statusPillClass(displayStatus(row.house))" style="font-size:14px;">
+                    {{ displayStatus(row.house) }}
+                  </span>
+                  <button class="btn btn-sm btn-outline-primary" @click.stop="openAddModal(row.house)">結果入力</button>
+                  <button class="btn btn-sm btn-outline-secondary" @click.stop="openHistoryModal(row.house)" title="履歴">
+                    <i class="fas fa-history"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
       </div>
     </div>
 
@@ -256,7 +301,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from "vue";
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from "vue";
 import { useRouter } from "vue-router";
 import QRCode from "qrcode";
 import { useAuthStore } from "@/store/authStore.js";
@@ -267,6 +312,7 @@ import VisitModal from "@/components/VisitModal.vue";
 import HouseInfoModal from "@/components/HouseInfoModal.vue";
 import OfflineSyncDialog from "@/components/OfflineSyncDialog.vue";
 import { buildingIconClass } from "@/utils/buildingIcons.js";
+import { groupHousesByBuilding } from "@/utils/buildingGroups.js";
 
 const props = defineProps({
   cardNo:  { type: Number, required: true },
@@ -344,6 +390,30 @@ const filteredHouses = computed(() => {
   return houses.value.filter(h => (h.VisitStatus || "未訪問") === statusFilter.value);
 });
 
+// ---- 建物単位のアコーディオン表示（#100） ----
+// キー: 建物グループキー、値: 展開中かどうか
+const expandedGroups = reactive({});
+function toggleGroup(key) {
+  expandedGroups[key] = !expandedGroups[key];
+}
+
+// 表示行を「建物ヘッダー行」「住戸行」が混在する1本のリストに平坦化する。
+// 建物ヘッダーは展開時のみ配下の住戸行を続けて出力する。
+const visibleRows = computed(() => {
+  const rows = [];
+  for (const entry of groupHousesByBuilding(filteredHouses.value)) {
+    if (entry.type === "house") {
+      rows.push({ kind: "house", house: entry.house, grouped: false });
+      continue;
+    }
+    rows.push({ kind: "building", key: entry.key, houses: entry.houses });
+    if (expandedGroups[entry.key]) {
+      for (const h of entry.houses) rows.push({ kind: "house", house: h, grouped: true });
+    }
+  }
+  return rows;
+});
+
 // ステータスの pill スタイル
 function statusPillClass(status) {
   const map = {
@@ -353,6 +423,18 @@ function statusPillClass(status) {
     "未訪問":  "badge bg-secondary",
   };
   return map[status] || "badge bg-light text-dark";
+}
+
+// 地図ピンの色（#101）。訪問NG（NGFlag）はVisitStatusに関わらず最優先で赤にする。
+const PIN_COLORS = {
+  "未訪問": { fill: "#495057", stroke: "#212529" }, // 濃い灰色
+  "不在":   { fill: "#FFC107", stroke: "#B8860B" }, // 黄色
+  "済":     { fill: "#28A745", stroke: "#1E7E34" }, // 緑
+  ng:       { fill: "#DC3545", stroke: "#A71D2A" }, // 赤（訪問NG）
+};
+function pinColor(h) {
+  if (h.NGFlag === "不可") return PIN_COLORS.ng;
+  return PIN_COLORS[h.VisitStatus || "未訪問"] || PIN_COLORS["未訪問"];
 }
 
 const TIME_ORDER = {
@@ -398,17 +480,30 @@ function displayStatus(h) {
 // 住戸リスト側からの選択：該当ピンを強調表示し、地図を移動して吹き出しを開く
 function focusHouse(h) {
   const prevMarker = focusedHousing.value != null ? markersByHousing.get(focusedHousing.value) : null;
-  if (prevMarker) setMarkerFocused(prevMarker, false);
+  if (prevMarker) {
+    const prevHouse = houses.value.find(x => x.HousingNo === focusedHousing.value);
+    const c = prevHouse ? pinColor(prevHouse) : PIN_COLORS["未訪問"];
+    setMarkerFocused(prevMarker, false, c.fill, c.stroke);
+  }
 
   focusedHousing.value = h.HousingNo;
 
   const marker = markersByHousing.get(h.HousingNo);
   if (mapInstance && marker && h.CSVLat && h.CSVLng) {
-    setMarkerFocused(marker, true);
+    const c = pinColor(h);
+    setMarkerFocused(marker, true, c.fill, c.stroke);
     mapInstance.panTo({ lat: h.CSVLat, lng: h.CSVLng });
     mapInstance.setZoom(18);
     openInfoWindow(h, marker);
   }
+}
+
+// 住戸の訪問ステータス／NGフラグが変わった際に、該当ピンの色を塗り替える
+function updateMarkerColor(h) {
+  const marker = markersByHousing.get(h.HousingNo);
+  if (!marker) return;
+  const c = pinColor(h);
+  setMarkerFocused(marker, focusedHousing.value === h.HousingNo, c.fill, c.stroke);
 }
 
 // 地図側（ピンクリック）からの選択：住戸リストの該当行をハイライトし、スクロールする
@@ -439,7 +534,10 @@ function openHouseInfoModal(h) {
 
 function onHouseInfoSaved(updated) {
   const idx = houses.value.findIndex(h => h.DetailID === updated.DetailID);
-  if (idx !== -1) houses.value[idx] = { ...houses.value[idx], ...updated };
+  if (idx !== -1) {
+    houses.value[idx] = { ...houses.value[idx], ...updated };
+    updateMarkerColor(houses.value[idx]);
+  }
 }
 
 // 「結果入力」：訪問記録の追加専用モーダルを開く
@@ -508,6 +606,7 @@ function onRecordSaved({ house, visitStatus, offline }) {
   const target = houses.value.find(h => h.HousingNo === house.HousingNo);
   if (target) {
     target.VisitStatus = visitStatus;
+    updateMarkerColor(target);
     if (!offline) reloadHouse(house);
   }
 }
@@ -522,6 +621,8 @@ async function reloadHouse(house) {
     const res = await getChildDetail(house.CardNo, house.ChildNo);
     if (res.status === "success") {
       houses.value = res.houses;
+      const target = houses.value.find(h => h.HousingNo === house.HousingNo);
+      if (target) updateMarkerColor(target);
     }
   } catch (e) {
     console.error(e);
@@ -546,12 +647,16 @@ async function initMap() {
     }
 
     // 住戸マーカー（クリックで住戸リストの該当行をハイライト・吹き出し表示）
+    // ピンの色は訪問ステータス／訪問NGフラグに応じて塗り分ける（#101）
     for (const h of houses.value) {
       if (h.CSVLat && h.CSVLng) {
+        const c = pinColor(h);
         const marker = addMarker(
           mapInstance,
           { lat: Number(h.CSVLat), lng: Number(h.CSVLng) },
-          `#${h.HousingNo} ${h.FamilyName}`
+          `#${h.HousingNo} ${h.FamilyName}`,
+          c.fill,
+          c.stroke
         );
         marker.addListener("click", () => focusFromMarker(h));
         markers.push(marker);
@@ -644,6 +749,10 @@ onUnmounted(() => {
 
 .focused-house {
   background-color: #fff8d6 !important;
+}
+
+.building-row {
+  background-color: #f1f3f5;
 }
 
 .col-id       { width: 48px;  text-align: center; }

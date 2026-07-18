@@ -312,6 +312,16 @@ export async function updateSiteAccessCode(code) {
   return callWorker({ funcName: "updateSiteAccessCode", code });
 }
 
+/** 「地図で指定」ピッカーの初期表示位置（管理者設定）を取得する */
+export async function getDefaultMapCenter() {
+  return callWorker({ funcName: "getDefaultMapCenter" });
+}
+
+/** 「地図で指定」ピッカーの初期表示位置を変更する（管理者のみ） */
+export async function updateDefaultMapCenter(lat, lng) {
+  return callWorker({ funcName: "updateDefaultMapCenter", lat, lng });
+}
+
 // ----------------------------------------------------------------
 // 住居リストの編集 / CSVインポート
 // ----------------------------------------------------------------

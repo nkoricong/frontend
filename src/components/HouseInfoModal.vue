@@ -220,6 +220,7 @@ import { upsertDetail, getKibanTowns, getKibanChoList, getKibanBanchiList, getKi
 import { useAuthStore } from "@/store/authStore.js";
 import { buildingIconClass } from "@/utils/buildingIcons.js";
 import { loadGoogleMaps, createMap, addMarker } from "@/services/maps.js";
+import { resolveMapCenter } from "@/services/mapCenter.js";
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -245,7 +246,6 @@ const TEL_SOURCE_KINDS = [
 const YOUNGER_GEN_OPTIONS = ["若い世代に会えた", "若い世代と推定", "一般", "未確認"];
 const NG_FLAG_OPTIONS  = ["可", "不可"];
 const NG_CHECK_OPTIONS = ["未確認", "確認済"];
-const DEFAULT_MAP_CENTER = { lat: 35.6812, lng: 139.7671 };
 
 const form       = ref(null);
 const saving     = ref(false);
@@ -371,9 +371,7 @@ async function openMapPicker() {
   await nextTick();
   try {
     await loadGoogleMaps();
-    const center = (form.value.CSVLat && form.value.CSVLng)
-      ? { lat: Number(form.value.CSVLat), lng: Number(form.value.CSVLng) }
-      : DEFAULT_MAP_CENTER;
+    const center = await resolveMapCenter(form.value, banchiOptions.value);
     pickerMapInstance = createMap(pickerMapContainer.value, center, 17);
     pickerMarker = addMarker(pickerMapInstance, center, "");
     pickerMapInstance.addListener("click", (e) => {

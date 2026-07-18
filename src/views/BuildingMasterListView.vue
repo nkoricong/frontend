@@ -31,6 +31,15 @@
 
     <!-- ツールバー -->
     <div class="d-flex flex-wrap gap-2 justify-content-end mb-2 px-2">
+      <button class="btn btn-outline-secondary" @click="downloadCsvFormat">
+        <i class="fas fa-file-alt"></i> CSVフォーマットのダウンロード
+      </button>
+      <button class="btn btn-outline-secondary" @click="exportCsv" :disabled="buildings.length === 0">
+        <i class="fas fa-file-export"></i> CSVエクスポート
+      </button>
+      <button class="btn btn-outline-secondary" @click="openImportModal" :disabled="busy">
+        <i class="fas fa-file-import"></i> CSVインポート
+      </button>
       <button class="btn btn-outline-secondary" @click="fetchBuildings" :disabled="busy">
         <i class="fas fa-redo"></i> 再読み込み
       </button>
@@ -274,10 +283,69 @@
     </div>
   </div>
 
+  <!-- CSVインポートモーダル（#103） -->
+  <div v-if="showImportModal">
+    <div class="modal-backdrop-custom" @click="closeImportModal"></div>
+    <div class="modal d-block" tabindex="-1">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">建物マスタのCSVインポート</h5>
+            <button type="button" class="btn-close" @click="closeImportModal"></button>
+          </div>
+
+          <div class="modal-body">
+            <p class="text-muted small mb-2">
+              「CSVフォーマットのダウンロード」で取得したCSVと同じ列構成のファイルを選択してください。
+              BuildingNo列が空欄の行は新規追加、既存の建物マスタに存在するBuildingNoが入力された行はその建物を上書き更新します。
+            </p>
+            <input type="file" class="form-control" accept=".csv" @change="onImportFileChange">
+            <p v-if="importParseMessage" class="mt-2 mb-0 small">{{ importParseMessage }}</p>
+
+            <div v-if="importRows.length > 0" class="table-responsive mt-3">
+              <p class="small text-muted mb-1">プレビュー（先頭{{ importPreviewRows.length }}件 / 全{{ importRows.length }}件）</p>
+              <table class="table table-sm table-bordered">
+                <thead>
+                  <tr>
+                    <th>BuildingNo</th>
+                    <th>建物種別</th>
+                    <th>建物名</th>
+                    <th>住所</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(row, idx) in importPreviewRows" :key="idx">
+                    <td>{{ row.BuildingNo || "（新規）" }}</td>
+                    <td>{{ row.BuildingCategory }}</td>
+                    <td>{{ row.BuildingName }}</td>
+                    <td class="small">
+                      <span v-if="row.AddressSW === '直接入力'">{{ row.InputTownName }}{{ row.InputCho }}{{ row.InputBanchi }}</span>
+                      <span v-else>{{ row.CSVTownName }}{{ row.CSVCho }}{{ row.CSVBanchi }}</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <p v-if="importResultMessage" class="small mt-2 mb-0" :class="importResultOk ? 'text-success' : 'text-danger'">{{ importResultMessage }}</p>
+          </div>
+
+          <div class="modal-footer">
+            <button class="btn btn-secondary" @click="closeImportModal">閉じる</button>
+            <button class="btn btn-primary" :disabled="importRows.length === 0 || importing" @click="runCsvImport">
+              <span v-if="importing"><i class="fas fa-spinner fa-spin"></i> インポート中...（{{ importedCount }} / {{ importRows.length }}件）</span>
+              <span v-else>インポート実行</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from "vue";
+import { ref, computed, onMounted, nextTick } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/store/authStore.js";
 import {
@@ -293,6 +361,8 @@ import {
 } from "@/services/api.js";
 import { buildingIconClass } from "@/utils/buildingIcons.js";
 import { loadGoogleMaps, createMap, addMarker } from "@/services/maps.js";
+import { resolveMapCenter } from "@/services/mapCenter.js";
+import { buildCsv, downloadCsv, parseCsvWithHeader } from "@/utils/csv.js";
 
 const router    = useRouter();
 const authStore = useAuthStore();
@@ -316,7 +386,6 @@ const COMMIT_CHUNK_SIZE  = 50; // 1回のcommit呼び出しで書き込む建物
 const BuildKinds = ["戸建て", "長屋", "アパート", "マンション", "オートロック", "寮", "店舗", "事務所", "工場", "倉庫", "各種施設", "駐車場", "空地", "空き家", "その他"];
 const NGStatus    = ["可", "不可"];
 const NGCheckSels = ["未確認", "確認済"];
-const DEFAULT_MAP_CENTER = { lat: 35.6812, lng: 139.7671 };
 
 function blankForm() {
   return {
@@ -541,9 +610,7 @@ async function openMapPicker() {
   await nextTick();
   try {
     await loadGoogleMaps();
-    const center = (editForm.value.CSVLat && editForm.value.CSVLng)
-      ? { lat: Number(editForm.value.CSVLat), lng: Number(editForm.value.CSVLng) }
-      : DEFAULT_MAP_CENTER;
+    const center = await resolveMapCenter(editForm.value, banchiOptions.value);
     pickerMapInstance = createMap(pickerMapContainer.value, center, 17);
     pickerMarker = addMarker(pickerMapInstance, center, "");
     pickerMapInstance.addListener("click", (e) => {
@@ -622,6 +689,110 @@ async function saveForm() {
     saveError.value = e.message || "保存に失敗しました";
   } finally {
     busy.value = false;
+  }
+}
+
+// ---- CSVインポート／エクスポート（#103） ----
+// エクスポート／インポートの列構成。順序がそのままCSVの列順・ヘッダー名になる。
+// これはbuildingMasterService.jsのtoBuilding()が公開する項目と完全に一致する
+// （detailテーブルと異なり隠れた集計項目が無いため、上書き更新でも取りこぼしがない）。
+const CSV_COLUMNS = [
+  "BuildingNo", "BuildingCategory", "BuildingName", "Floors", "Rooms",
+  "AddressSW", "CSVTownName", "CSVCho", "CSVBanchi", "InputTownName", "InputCho", "InputBanchi", "CSVLat", "CSVLng",
+  "NGFlag", "NGDate", "NGComment", "NGSarvant", "NGChecked", "Note",
+];
+
+function downloadCsvFormat() {
+  downloadCsv(buildCsv(CSV_COLUMNS, []), "建物マスタCSVフォーマット.csv");
+}
+
+function exportCsv() {
+  downloadCsv(buildCsv(CSV_COLUMNS, buildings.value), "建物マスタ.csv");
+}
+
+const showImportModal     = ref(false);
+const importRows          = ref([]);
+const importParseMessage  = ref("");
+const importing           = ref(false);
+const importedCount       = ref(0);
+const importResultMessage = ref("");
+const importResultOk      = ref(false);
+
+const importPreviewRows = computed(() => importRows.value.slice(0, 10));
+
+function openImportModal() {
+  showImportModal.value     = true;
+  importRows.value          = [];
+  importParseMessage.value  = "";
+  importResultMessage.value = "";
+}
+
+function closeImportModal() {
+  showImportModal.value = false;
+}
+
+async function onImportFileChange(event) {
+  const file = event.target.files && event.target.files[0];
+  event.target.value = ""; // 同じファイルを選び直しても change が発火するようにする
+  if (!file) return;
+
+  importResultMessage.value = "";
+  try {
+    const text = await file.text();
+    const rows = parseCsvWithHeader(text);
+    importRows.value = rows;
+    importParseMessage.value = rows.length > 0
+      ? `${rows.length}件のデータを読み込みました。内容を確認して「インポート実行」を押してください。`
+      : "有効なデータ行が見つかりませんでした。ヘッダー行と列構成を確認してください。";
+  } catch (e) {
+    console.error(e);
+    importRows.value = [];
+    importParseMessage.value = "ファイルの読み込みに失敗しました。";
+  }
+}
+
+async function runCsvImport() {
+  if (importRows.value.length === 0) return;
+
+  // 既存の建物マスタに存在しないBuildingNoが指定されている行がないか、実行前にまとめて検証する
+  const existingNos = new Set(buildings.value.map(b => b.BuildingNo));
+  const invalidRow = importRows.value.find(row => row.BuildingNo && !existingNos.has(Number(row.BuildingNo)));
+  if (invalidRow) {
+    importResultOk.value = false;
+    importResultMessage.value = `BuildingNo "${invalidRow.BuildingNo}" は建物マスタに存在しません。エクスポートしたCSVを元に編集してからインポートしてください。`;
+    return;
+  }
+
+  if (!confirm(`${importRows.value.length}件をインポートします。BuildingNo列が空欄の行は新規追加、指定された行は上書き更新されます。よろしいですか？`)) return;
+
+  importing.value = true;
+  importedCount.value = 0;
+  importResultMessage.value = "";
+  try {
+    for (const row of importRows.value) {
+      const payload = { BuildingNo: row.BuildingNo ? Number(row.BuildingNo) : null };
+      for (const col of CSV_COLUMNS) {
+        if (col === "BuildingNo") continue;
+        payload[col] = row[col] ?? "";
+      }
+
+      const res = await upsertBuildingMaster(payload);
+      if (res.status !== "success") {
+        throw new Error(res.message || `${importedCount.value + 1}行目でエラーが発生しました`);
+      }
+      importedCount.value++;
+    }
+
+    importResultOk.value = true;
+    importResultMessage.value = `インポートが完了しました。（${importedCount.value}件）`;
+    importRows.value = [];
+    await fetchBuildings();
+  } catch (e) {
+    console.error(e);
+    importResultOk.value = false;
+    importResultMessage.value = e.message || `インポートに失敗しました（${importedCount.value}件まで完了）。`;
+  } finally {
+    importing.value = false;
   }
 }
 
