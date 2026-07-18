@@ -115,14 +115,14 @@
             <div class="d-flex justify-content-end gap-2 mt-2" v-if="canAssign">
               <button
                 v-if="isCheckoutable(child)"
-                class="btn btn-sm btn-outline-success"
+                class="btn btn-sm btn-warning"
                 @click.stop="openCheckoutModal(child)"
               >
                 <i class="fas fa-hand-holding"></i> 貸出
               </button>
               <button
                 v-else-if="child.CHILDSTATUS === '貸出中'"
-                class="btn btn-sm btn-outline-danger"
+                class="btn btn-sm btn-success"
                 @click.stop="returnCard(child)"
               >
                 <i class="fas fa-undo"></i> 返却
