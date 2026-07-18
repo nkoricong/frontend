@@ -63,23 +63,24 @@
             </div>
 
             <div class="col-3 col-form-label small">時間帯</div>
-            <div class="col-9">
-              <select class="form-select form-select-sm" v-model="form.Time">
-                <option v-for="t in TIME_OPTIONS" :key="t" :value="t">{{ t }}</option>
-              </select>
+            <div class="col-9 toggle-group">
+              <template v-for="t in TIME_OPTIONS" :key="t">
+                <input type="radio" class="btn-check" :id="`time-${t}`" v-model="form.Time" :value="t" autocomplete="off">
+                <label class="btn btn-sm" :class="form.Time === t ? 'btn-primary' : 'btn-outline-primary'" :for="`time-${t}`">{{ t }}</label>
+              </template>
             </div>
 
             <div class="col-3 col-form-label small">方法</div>
             <div class="col-9 toggle-group">
               <template v-for="f in FIELD_OPTIONS" :key="f">
-                <input type="radio" class="btn-check" :id="`field-${f}`" v-model="form.Field" :value="f" autocomplete="off">
+                <input type="radio" class="btn-check" :id="`field-${f}`" v-model="form.Field" :value="f" autocomplete="off" @change="onFieldChange">
                 <label class="btn btn-sm" :class="form.Field === f ? 'btn-primary' : 'btn-outline-primary'" :for="`field-${f}`">{{ f }}</label>
               </template>
             </div>
 
             <div class="col-3 col-form-label small">結果</div>
             <div class="col-9 toggle-group">
-              <template v-for="r in RESULT_OPTIONS" :key="r">
+              <template v-for="r in resultOptions" :key="r">
                 <input type="radio" class="btn-check" :id="`result-${r}`" v-model="form.Result" :value="r" autocomplete="off">
                 <label class="btn btn-sm" :class="form.Result === r ? 'btn-primary' : 'btn-outline-primary'" :for="`result-${r}`">{{ r }}</label>
               </template>
@@ -171,7 +172,41 @@ const authStore = useAuthStore();
 
 const TIME_OPTIONS   = ["9時以前", "9時〜12時", "12時〜13時", "13時〜16時", "16時〜18時", "18時以降"];
 const FIELD_OPTIONS  = ["訪問", "ｷｬﾝﾍﾟｰﾝ", "手紙", "電話", "その他"];
-const RESULT_OPTIONS = ["済", "済(投函)", "済(留守録)", "不在", "訪問不可"];
+
+// 方法（Field）に応じて選べる結果（Result）を絞り込む（ORIGINAL/ChildMap.htmlのchangeFieldSelectorを踏襲）
+const RESULT_MAP = {
+  "訪問":     ["不在", "済"],
+  "ｷｬﾝﾍﾟｰﾝ":  ["不在", "済", "済(投函)", "済(留守録)", "その他"],
+  "手紙":     ["不在", "済(投函)"],
+  "電話":     ["不在", "済", "済(留守録)"],
+  "その他":   ["不在", "済", "済(投函)", "済(留守録)", "その他"],
+};
+const resultOptions = computed(() => RESULT_MAP[form.value.Field] || RESULT_MAP["訪問"]);
+
+// 方法が変わった際、現在選択中の結果を新しい方法で意味の近い値へ読み替える
+// （単純にリセットせず、ORIGINAL/ChildMap.htmlのchangeFieldSelectorと同じ読み替えルールを踏襲）
+function remapResultForField(field, currentResult) {
+  switch (currentResult) {
+    case "不在":
+      return "不在";
+    case "その他":
+      return (field === "その他" || field === "ｷｬﾝﾍﾟｰﾝ") ? "その他" : "不在";
+    case "済":
+      return field === "手紙" ? "済(投函)" : "済";
+    case "済(投函)":
+      return (field === "その他" || field === "ｷｬﾝﾍﾟｰﾝ" || field === "手紙") ? "済(投函)" : "済";
+    case "済(留守録)":
+      if (field === "その他" || field === "ｷｬﾝﾍﾟｰﾝ" || field === "電話") return "済(留守録)";
+      if (field === "手紙") return "済(投函)";
+      return "済";
+    default:
+      return "不在";
+  }
+}
+
+function onFieldChange() {
+  form.value.Result = remapResultForField(form.value.Field, form.value.Result);
+}
 
 // 現在時刻から時間帯の初期値を決める（ORIGINAL/ChildMap.htmlのregistモード初期化ロジックを踏襲）
 function defaultTimeOfDay() {
@@ -209,7 +244,7 @@ const form = ref({
   VisitDate: new Date().toISOString().slice(0, 10),
   Time:      defaultTimeOfDay(),
   Field:     "訪問",
-  Result:    "",
+  Result:    "不在",
   Minister:  "",
   Comment:   "",
   Note:      "",
@@ -240,7 +275,7 @@ watch(() => props.modelValue, (v) => {
       VisitDate: new Date().toISOString().slice(0, 10),
       Time:      defaultTimeOfDay(),
       Field:     "訪問",
-      Result:    "",
+      Result:    "不在",
       Minister:  props.offlineUser?.userName || authStore.userName || "",
       Comment:   "",
       Note:      "",

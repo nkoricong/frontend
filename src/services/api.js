@@ -226,14 +226,15 @@ export async function getMinisterOptions(group) {
   return callWorker({ funcName: "getMinisterOptions", Group: group });
 }
 
-/** 子カードの担当奉仕者を変更する */
-export async function assignChildMinister(childId, ministerId, startDate = null, limitDate = null) {
+/** 子カードの担当奉仕者・期限日・貸出日・メモを変更する（貸出登録／修正） */
+export async function assignChildMinister(childId, { ministerId = null, limitDate = null, checkoutDate = null, description } = {}) {
   return callWorker({
-    funcName:  "assignChildMinister",
-    ChildID:   childId,
-    MinisterID: ministerId,
-    StartDate: startDate,
-    LimitDate: limitDate,
+    funcName:     "assignChildMinister",
+    ChildID:      childId,
+    MinisterID:   ministerId,
+    LimitDate:    limitDate,
+    CheckoutDate: checkoutDate,
+    Description:  description,
   });
 }
 
@@ -245,6 +246,11 @@ export async function returnChildCard(childId) {
 /** 返却済の子カードの返却を取り消し、貸出中に戻す（使用期限内の場合のみ） */
 export async function cancelChildReturn(childId) {
   return callWorker({ funcName: "cancelChildReturn", ChildID: childId });
+}
+
+/** 貸出中の子カードの貸出を取り消す（親カード期限に応じて貸出可能／返却済に戻す） */
+export async function cancelChildCheckout(childId) {
+  return callWorker({ funcName: "cancelChildCheckout", ChildID: childId });
 }
 
 /** 子カードの共有用ワンタイムトークンを発行する */

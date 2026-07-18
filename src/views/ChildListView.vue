@@ -73,23 +73,19 @@
 
             <div class="d-flex justify-content-between align-items-start mb-1">
               <h5 class="card-title mb-0">
-                <span class="cardno-badge">{{ child.CARDNO }}-{{ child.CHILDNO }}</span>
-                {{ child.CHILDBLOCK }}
+                <span class="cardno-badge" :style="{ backgroundColor: colorBg(child.COLOR), borderColor: colorBg(child.COLOR) }">{{ child.CARDNO }}-{{ child.CHILDNO }}</span>
+                {{ child.CHILDBLOCK }} (<i class="fas fa-house-user"></i>{{ child.CHILDHOUSES }}件)
               </h5>
               <button
                 type="button"
                 class="btn btn-sm rounded-pill"
                 :class="statusBadgeClass(child.CHILDSTATUS)"
                 :disabled="!canAssign"
-                @click.stop="openAssignModal(child)"
+                @click.stop="openFixModal(child)"
               >
                 {{ child.CHILDSTATUS }}
               </button>
             </div>
-
-            <p class="mb-1 small text-muted">
-              {{ child.CHILDHOUSES }}件 ／ 訪問済：{{ child.VISITED ?? 0 }}件
-            </p>
 
             <p class="mb-1 small">
               奉仕者：
@@ -98,19 +94,29 @@
               </span>
             </p>
 
-            <p class="mb-1 small text-muted">
-              期限：{{ child.CHILDLIMITDATE ?? '-' }}
-              <span v-if="isOverdue(child)" class="text-danger ms-1">（期限超過）</span>
+            <p v-if="child.CHILDSTATUS === '貸出中' || child.CHILDSTATUS === '返却済'" class="mb-1 small text-muted">
+              貸出日：{{ child.CHILDCHECKOUTDATE ?? '-' }}
+              <span v-if="child.CHILDSTATUS === '返却済'">／ 返却日：{{ child.CHILDRETURNDATE ?? '-' }}</span>
+            </p>
+
+            <p v-if="child.CHILDSTATUS !== '整備中'" class="mb-1 small text-muted">
+              <template v-if="child.CHILDSTATUS === '返却済' && child.CARDSTATUS === '返却済'">
+                使用終了（{{ child.CHILDLIMITDATE ?? '-' }}迄）
+              </template>
+              <template v-else>
+                使用可能期間：{{ child.CHILDSTARTDATE ?? '-' }} ～ {{ child.CHILDLIMITDATE ?? '-' }}
+                <span v-if="isOverdue(child)" class="text-danger ms-1">（期限超過）</span>
+              </template>
+            </p>
+            <p v-if="isParentLimitBeforeChild(child)" class="mb-1 small text-muted">
+              （親カード期限：{{ child.CARDLIMITDATE }}）
             </p>
 
             <div class="d-flex justify-content-end gap-2 mt-2" v-if="canAssign">
-              <button class="btn btn-sm btn-outline-secondary" @click.stop="openAssignModal(child)">
-                <i class="fas fa-user-edit"></i> 割当変更
-              </button>
               <button
                 v-if="isCheckoutable(child)"
                 class="btn btn-sm btn-outline-success"
-                @click.stop="openAssignModal(child)"
+                @click.stop="openCheckoutModal(child)"
               >
                 <i class="fas fa-hand-holding"></i> 貸出
               </button>
@@ -135,7 +141,7 @@
 
   </main>
 
-  <!-- 割当変更モーダル -->
+  <!-- 貸出／修正モーダル -->
   <div
     class="modal fade"
     :class="{ show: assignTarget }"
@@ -149,32 +155,56 @@
 
         <div class="modal-header">
           <h5 class="modal-title">
+            {{ assignMode === 'checkout' ? '貸出' : '修正' }}：
             区域No.{{ assignTarget.CARDNO }}-{{ assignTarget.CHILDNO }} {{ assignTarget.CHILDBLOCK }}
           </h5>
           <button type="button" class="btn-close" @click="closeAssignModal"></button>
         </div>
 
         <div class="modal-body">
-          <label class="form-label">奉仕者</label>
-          <select class="form-select mb-3" v-model="selectedMinisterId">
-            <option value="">未割当にする</option>
-            <option v-for="m in ministers" :key="m.ID" :value="m.ID">{{ m.UserName }}</option>
-          </select>
+          <div class="row g-2 align-items-center">
+            <div class="col-6">奉仕者</div>
+            <div class="col-6">
+              <select class="form-select form-select-sm" v-model="selectedMinisterId">
+                <option value="">-選択-</option>
+                <option v-for="m in ministers" :key="m.ID" :value="m.ID">{{ m.UserName }}</option>
+              </select>
+            </div>
 
-          <label class="form-label">使用開始日</label>
-          <input type="date" class="form-control mb-3" v-model="assignStartDate" />
+            <div class="col-6">貸出日</div>
+            <div class="col-6">
+              <input type="date" class="form-control form-control-sm" v-model="assignCheckoutDate" />
+            </div>
 
-          <label class="form-label">使用期限</label>
-          <input type="date" class="form-control" v-model="assignLimitDate" />
+            <div class="col-6">期限日</div>
+            <div class="col-6">
+              <input type="date" class="form-control form-control-sm" v-model="assignLimitDate" />
+            </div>
+            <div class="col-6">（最大）</div>
+            <div class="col-6">{{ assignTarget.CARDLIMITDATE ?? '-' }}</div>
+
+            <div class="col-6">メモ</div>
+            <div class="col-6">
+              <textarea class="form-control form-control-sm" v-model="assignDescription" rows="3" maxlength="128"></textarea>
+            </div>
+          </div>
 
           <p v-if="assignError" class="text-danger small mt-2">{{ assignError }}</p>
         </div>
 
         <div class="modal-footer">
+          <button
+            v-if="assignMode === 'fix' && assignTarget.CHILDSTATUS === '貸出中'"
+            class="btn btn-outline-danger me-auto"
+            @click="cancelCheckout"
+            :disabled="assigning"
+          >
+            貸出を取り消す
+          </button>
           <button class="btn btn-secondary" @click="closeAssignModal">閉じる</button>
           <button class="btn btn-primary" @click="submitAssign" :disabled="assigning">
-            <span v-if="assigning"><i class="fas fa-spinner fa-spin"></i> 変更中...</span>
-            <span v-else>貸出期間変更</span>
+            <span v-if="assigning"><i class="fas fa-spinner fa-spin"></i> 処理中...</span>
+            <span v-else>{{ assignMode === 'checkout' ? '登録' : '更新' }}</span>
           </button>
         </div>
 
@@ -189,7 +219,10 @@
 import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/store/authStore.js";
-import { getGroupChildList, getMinisterOptions, assignChildMinister, returnChildCard } from "@/services/api.js";
+import {
+  getGroupChildList, getMinisterOptions, assignChildMinister,
+  returnChildCard, cancelChildCheckout,
+} from "@/services/api.js";
 
 const router    = useRouter();
 const authStore = useAuthStore();
@@ -203,9 +236,11 @@ const filterStatus     = ref("");
 const overdueOnly      = ref(false);
 
 const assignTarget       = ref(null);
+const assignMode         = ref("checkout"); // "checkout" | "fix"
 const selectedMinisterId = ref("");
-const assignStartDate    = ref("");
+const assignCheckoutDate = ref("");
 const assignLimitDate    = ref("");
+const assignDescription  = ref("");
 const assigning          = ref(false);
 const assignError        = ref("");
 
@@ -221,9 +256,20 @@ const filteredCards = computed(() => {
   });
 });
 
+// カードの色ラベル（赤/青/黄/緑/白/★）をCSS色に変換する（区域リスト画面と同一の配色）
+const COLOR_MAP = { 赤: "#ffb6c1", 青: "#87cefa", 黄: "#ffd700", 緑: "#00FF00", "★": "#00FF00" };
+function colorBg(color) {
+  return COLOR_MAP[color] || "#e0e0e0";
+}
+
 function isOverdue(child) {
   if (!child.CHILDLIMITDATE) return false;
   return child.CHILDSTATUS === "貸出中" && child.CHILDLIMITDATE < new Date().toISOString().slice(0, 10);
+}
+
+// 親カード（区域カード）の使用期限日より子カードの使用期限日の方が後になっている場合に警告表示する
+function isParentLimitBeforeChild(child) {
+  return !!(child.CARDLIMITDATE && child.CHILDLIMITDATE && child.CARDLIMITDATE < child.CHILDLIMITDATE);
 }
 
 // 貸出可能・返却済で、かつ使用期限が到来していない子カードは「貸出」ボタンで貸し出せるようにする
@@ -270,12 +316,26 @@ function openChildMap(child) {
   });
 }
 
-function openAssignModal(child) {
-  assignTarget.value       = child;
-  selectedMinisterId.value = child.MINISTER || "";
-  assignStartDate.value    = child.CHILDSTARTDATE || "";
-  assignLimitDate.value    = child.CHILDLIMITDATE || "";
-  assignError.value        = "";
+// 「貸出」ボタン：新規に貸し出す（奉仕者未選択・貸出日は今日を初期値にする）
+function openCheckoutModal(child) {
+  assignMode.value          = "checkout";
+  assignTarget.value        = child;
+  selectedMinisterId.value  = "";
+  assignCheckoutDate.value  = new Date().toISOString().slice(0, 10);
+  assignLimitDate.value     = child.CHILDLIMITDATE || "";
+  assignDescription.value   = "";
+  assignError.value         = "";
+}
+
+// ステータスピルのクリック：既存の貸出内容を修正する（貸出中なら貸出取消も可能）
+function openFixModal(child) {
+  assignMode.value          = "fix";
+  assignTarget.value        = child;
+  selectedMinisterId.value  = child.MINISTER || "";
+  assignCheckoutDate.value  = child.CHILDCHECKOUTDATE || "";
+  assignLimitDate.value     = child.CHILDLIMITDATE || "";
+  assignDescription.value   = child.DESCRIPTION || "";
+  assignError.value         = "";
 }
 
 // 返却：確認ダイアログの後、モーダルを介さず即座にステータスを返却済にする
@@ -303,27 +363,70 @@ function closeAssignModal() {
 
 async function submitAssign() {
   if (!assignTarget.value) return;
+
+  if (!selectedMinisterId.value) {
+    assignError.value = "貸し出す奉仕者名を選択してください。";
+    return;
+  }
+  if (assignCheckoutDate.value && assignLimitDate.value && assignCheckoutDate.value > assignLimitDate.value) {
+    assignError.value = "期限日は貸出日以降に設定してください。";
+    return;
+  }
+  if (assignTarget.value.CARDLIMITDATE && assignLimitDate.value && assignLimitDate.value > assignTarget.value.CARDLIMITDATE) {
+    assignError.value = "期限日は親カードの使用期限日（最大）を超えないように設定してください。";
+    return;
+  }
+
   assigning.value   = true;
   assignError.value = "";
   try {
-    const res = await assignChildMinister(
-      assignTarget.value.CHILDID,
-      selectedMinisterId.value || null,
-      assignStartDate.value || null,
-      assignLimitDate.value || null,
-    );
+    const res = await assignChildMinister(assignTarget.value.CHILDID, {
+      ministerId:   selectedMinisterId.value || null,
+      limitDate:    assignLimitDate.value || null,
+      checkoutDate: assignCheckoutDate.value || null,
+      description:  assignDescription.value,
+    });
     if (res.status === "success") {
       const idx = cards.value.findIndex(c => c.CHILDID === assignTarget.value.CHILDID);
       if (idx !== -1) {
-        cards.value[idx].MINISTER     = res.child?.MINISTER     ?? (selectedMinisterId.value || null);
-        cards.value[idx].MINISTERNAME = res.child?.MINISTERNAME ?? (ministers.value.find(m => Number(m.ID) === Number(selectedMinisterId.value))?.UserName ?? "");
-        if (res.child?.CHILDSTATUS)    cards.value[idx].CHILDSTATUS    = res.child.CHILDSTATUS;
-        if (res.child?.CHILDSTARTDATE) cards.value[idx].CHILDSTARTDATE = res.child.CHILDSTARTDATE;
-        if (res.child?.CHILDLIMITDATE) cards.value[idx].CHILDLIMITDATE = res.child.CHILDLIMITDATE;
+        cards.value[idx].MINISTER          = res.child?.MINISTER          ?? (selectedMinisterId.value || null);
+        cards.value[idx].MINISTERNAME      = res.child?.MINISTERNAME      ?? (ministers.value.find(m => Number(m.ID) === Number(selectedMinisterId.value))?.UserName ?? "");
+        if (res.child?.CHILDSTATUS)        cards.value[idx].CHILDSTATUS       = res.child.CHILDSTATUS;
+        if (res.child?.CHILDSTARTDATE)     cards.value[idx].CHILDSTARTDATE    = res.child.CHILDSTARTDATE;
+        if (res.child?.CHILDLIMITDATE)     cards.value[idx].CHILDLIMITDATE    = res.child.CHILDLIMITDATE;
+        if (res.child?.CHILDCHECKOUTDATE)  cards.value[idx].CHILDCHECKOUTDATE = res.child.CHILDCHECKOUTDATE;
+        cards.value[idx].DESCRIPTION = res.child?.DESCRIPTION ?? assignDescription.value;
       }
       closeAssignModal();
     } else {
       assignError.value = res.message || "更新に失敗しました";
+    }
+  } catch (e) {
+    assignError.value = e.message;
+  } finally {
+    assigning.value = false;
+  }
+}
+
+// 貸出取消：貸出中の子カードを、親カードの使用期限日に応じて貸出可能／返却済に戻す
+async function cancelCheckout() {
+  if (!assignTarget.value) return;
+  if (!confirm("取消を実行してもよろしいですか？")) return;
+
+  assigning.value = true;
+  try {
+    const res = await cancelChildCheckout(assignTarget.value.CHILDID);
+    if (res.status === "success") {
+      const idx = cards.value.findIndex(c => c.CHILDID === assignTarget.value.CHILDID);
+      if (idx !== -1) {
+        cards.value[idx].CHILDSTATUS       = res.child?.CHILDSTATUS       ?? cards.value[idx].CHILDSTATUS;
+        cards.value[idx].MINISTER          = res.child?.MINISTER          ?? null;
+        cards.value[idx].MINISTERNAME      = res.child?.MINISTERNAME      ?? "";
+        cards.value[idx].CHILDCHECKOUTDATE = res.child?.CHILDCHECKOUTDATE ?? cards.value[idx].CHILDCHECKOUTDATE;
+      }
+      closeAssignModal();
+    } else {
+      assignError.value = res.message || "取消に失敗しました";
     }
   } catch (e) {
     assignError.value = e.message;
@@ -353,5 +456,6 @@ onMounted(fetchData);
   font-weight: bold;
   margin-right: 6px;
   font-size: 14px;
+  color: #212529;
 }
 </style>

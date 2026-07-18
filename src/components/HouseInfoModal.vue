@@ -47,15 +47,10 @@
             <template v-if="form.AddressSW === '直接入力'">
               <div class="col-3 col-form-label small">町名</div>
               <div class="col-9">
-                <input
-                  class="form-control form-control-sm"
-                  v-model="form.InputTownName"
-                  :disabled="readOnly"
-                  list="town-name-options"
-                />
-                <datalist id="town-name-options">
-                  <option v-for="t in townOptions" :key="t" :value="t"></option>
-                </datalist>
+                <select class="form-select form-select-sm" v-model="form.InputTownName" :disabled="readOnly">
+                  <option value="" disabled>-選択-</option>
+                  <option v-for="t in townOptions" :key="t" :value="t">{{ t }}</option>
+                </select>
               </div>
               <div class="col-3 col-form-label small">番地</div>
               <div class="col-9">
@@ -319,6 +314,7 @@ watch(() => props.modelValue, async (open) => {
   if (open && props.house) {
     form.value = { ...props.house };
     if (!form.value.AddressSW) form.value.AddressSW = "リストから選択";
+    if (!form.value.NGFlag) form.value.NGFlag = "可";
     saveError.value = "";
     if (!props.readOnly) {
       await ensureTownsLoaded();
