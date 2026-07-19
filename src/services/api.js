@@ -221,6 +221,11 @@ export async function getGroupChildList(group) {
   return callWorker({ funcName: "getGroupChildList", Group: group });
 }
 
+/** KMLファイル1件分から、子カードごとのポリゴン座標を取得する（グループ地図画面用、#110） */
+export async function getChildPolygons(file) {
+  return callWorker({ funcName: "getChildPolygons", File: file });
+}
+
 /** グループに属する奉仕者（割当候補）一覧を取得する */
 export async function getMinisterOptions(group) {
   return callWorker({ funcName: "getMinisterOptions", Group: group });

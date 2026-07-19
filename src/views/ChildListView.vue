@@ -31,6 +31,10 @@
       ／ グループ：{{ authStore.userGroup }} ／ 権限：{{ authStore.userRole }}
     </div>
 
+    <div class="d-flex justify-content-end mb-3">
+      <GroupViewSwitcher :current="GROUP_VIEWS.CHILD_LIST" />
+    </div>
+
     <!-- リスト絞込 -->
     <div class="row g-2 align-items-end mb-3">
       <div class="col-auto">
@@ -319,6 +323,8 @@
 import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/store/authStore.js";
+import GroupViewSwitcher from "@/components/GroupViewSwitcher.vue";
+import { GROUP_VIEWS, setLastGroupView } from "@/services/groupViewPreference.js";
 import {
   getGroupChildList, getMinisterOptions, assignChildMinister,
   returnChildCard, cancelChildCheckout, getChildUsageHistory,
@@ -589,6 +595,13 @@ async function cancelCheckout() {
 // 一括貸出モーダルを開く（選択中のカードから初期値を推測する）
 function openBulkCheckoutModal() {
   if (selectedChildIds.value.length === 0) return;
+
+  // 選択中に「貸出中」のカードが含まれる場合は、除外して処理する旨を先に知らせる（#109）
+  const targets = cards.value.filter(c => selectedChildIds.value.includes(c.CHILDID));
+  if (targets.some(c => c.CHILDSTATUS === "貸出中")) {
+    alert("貸出中のカードを除外した上で貸出処理を行います。");
+  }
+
   bulkMinisterId.value     = "";
   bulkCheckoutDate.value   = new Date().toISOString().slice(0, 10);
   bulkLimitDate.value      = "";
@@ -712,7 +725,10 @@ async function bulkReturn() {
   if (failedCount > 0) alert(`${failedCount}件の返却に失敗しました。`);
 }
 
-onMounted(fetchData);
+onMounted(() => {
+  setLastGroupView(GROUP_VIEWS.CHILD_LIST);
+  fetchData();
+});
 </script>
 
 <style scoped>

@@ -109,6 +109,7 @@ import { useRouter } from "vue-router";
 import DOMPurify from "dompurify";
 import { useAuthStore } from "@/store/authStore.js";
 import { getActiveAnnouncements } from "@/services/api.js";
+import { getLastGroupView } from "@/services/groupViewPreference.js";
 
 const router    = useRouter();
 const authStore = useAuthStore();
@@ -145,12 +146,16 @@ onMounted(fetchAnnouncements);
 
 const PAGE_ROUTES = {
   cardlist:  "cardList",
-  childlist: "childList",
   settings:  "settings",
   admin:     "admins",
 };
 
 function go(page) {
+  // グループページは3画面あるため、最後に使った画面へ遷移する（#110）
+  if (page === "childlist") {
+    router.push({ name: getLastGroupView() });
+    return;
+  }
   const name = PAGE_ROUTES[page];
   if (name) router.push({ name });
 }

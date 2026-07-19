@@ -62,6 +62,16 @@ const routes = [
     component: () => import("@/views/ChildListView.vue"),
   },
   {
+    path:      "/childlist/minister",
+    name:      "ministerAssign",
+    component: () => import("@/views/MinisterAssignView.vue"),
+  },
+  {
+    path:      "/childlist/map",
+    name:      "groupMap",
+    component: () => import("@/views/GroupMapView.vue"),
+  },
+  {
     path:      "/settings",
     name:      "settings",
     component: () => import("@/views/SettingsView.vue"),
