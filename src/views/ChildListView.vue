@@ -63,6 +63,16 @@
       </div>
     </div>
 
+    <!-- 一括貸出・返却ツールバー -->
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-2" v-if="canAssign">
+      <button class="btn btn-outline-warning btn-sm" :disabled="selectedChildIds.length === 0" @click="openBulkCheckoutModal">
+        <i class="fas fa-hand-holding"></i> 貸出（{{ selectedChildIds.length }}件選択中）
+      </button>
+      <button class="btn btn-outline-success btn-sm" :disabled="selectedChildIds.length === 0" @click="bulkReturn">
+        <i class="fas fa-undo"></i> 返却（{{ selectedChildIds.length }}件選択中）
+      </button>
+    </div>
+
     <div class="mb-2"><h5>表示中の枚数：{{ filteredCards.length }}枚</h5></div>
 
     <!-- カード一覧 -->
@@ -73,6 +83,14 @@
 
             <div class="d-flex justify-content-between align-items-start mb-1">
               <h5 class="card-title mb-0">
+                <input
+                  v-if="canAssign"
+                  type="checkbox"
+                  class="form-check-input me-2"
+                  :value="child.CHILDID"
+                  v-model="selectedChildIds"
+                  @click.stop
+                >
                 <span class="cardno-badge" :style="{ backgroundColor: colorBg(child.COLOR), borderColor: colorBg(child.COLOR) }">{{ child.CARDNO }}-{{ child.CHILDNO }}</span>
                 {{ child.CHILDBLOCK }} (<i class="fas fa-house-user"></i>{{ child.CHILDHOUSES }}件)
               </h5>
@@ -232,6 +250,69 @@
   </div>
   <div v-if="assignTarget" class="modal-backdrop fade show"></div>
 
+  <!-- 一括貸出モーダル（#108） -->
+  <div
+    class="modal fade"
+    :class="{ show: showBulkCheckoutModal }"
+    :style="showBulkCheckoutModal ? 'display:block' : 'display:none'"
+    tabindex="-1"
+    role="dialog"
+    @click.self="closeBulkCheckoutModal"
+  >
+    <div class="modal-dialog" role="document">
+      <div class="modal-content" v-if="showBulkCheckoutModal">
+
+        <div class="modal-header">
+          <h5 class="modal-title">一括貸出（{{ selectedChildIds.length }}件選択中）</h5>
+          <button type="button" class="btn-close" @click="closeBulkCheckoutModal"></button>
+        </div>
+
+        <div class="modal-body">
+          <p class="text-muted small">
+            選択したカードのうち「貸出可能」または「返却済」のものだけに、同じ内容で一括貸出します。
+          </p>
+          <div class="row g-2 align-items-center">
+            <div class="col-6">奉仕者</div>
+            <div class="col-6">
+              <select class="form-select form-select-sm" v-model="bulkMinisterId">
+                <option value="">-選択-</option>
+                <option v-for="m in ministers" :key="m.ID" :value="m.ID">{{ m.UserName }}</option>
+              </select>
+            </div>
+
+            <div class="col-6">貸出日</div>
+            <div class="col-6">
+              <input type="date" class="form-control form-control-sm" v-model="bulkCheckoutDate" />
+            </div>
+
+            <div class="col-6">期限日</div>
+            <div class="col-6">
+              <input type="date" class="form-control form-control-sm" v-model="bulkLimitDate" />
+            </div>
+
+            <div class="col-6">メモ</div>
+            <div class="col-6">
+              <textarea class="form-control form-control-sm" v-model="bulkDescription" rows="3" maxlength="128"></textarea>
+            </div>
+          </div>
+
+          <p v-if="bulkError" class="text-danger small mt-2 mb-0">{{ bulkError }}</p>
+          <p v-if="bulkResultMessage" class="small mt-2 mb-0">{{ bulkResultMessage }}</p>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="closeBulkCheckoutModal">閉じる</button>
+          <button class="btn btn-primary" @click="submitBulkCheckout" :disabled="bulkProcessing">
+            <span v-if="bulkProcessing"><i class="fas fa-spinner fa-spin"></i> 処理中...（{{ bulkProcessedCount }} / {{ selectedChildIds.length }}件）</span>
+            <span v-else>一括貸出を実行</span>
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <div v-if="showBulkCheckoutModal" class="modal-backdrop fade show"></div>
+
 </template>
 
 <script setup>
@@ -267,6 +348,18 @@ const assignError        = ref("");
 const expandedChildId = ref(null);
 const historyCache    = ref({});
 const historyLoading  = ref(null);
+
+// ---- 一括貸出・返却（#108） ----
+const selectedChildIds     = ref([]);
+const showBulkCheckoutModal = ref(false);
+const bulkMinisterId        = ref("");
+const bulkCheckoutDate      = ref("");
+const bulkLimitDate         = ref("");
+const bulkDescription       = ref("");
+const bulkProcessing        = ref(false);
+const bulkProcessedCount    = ref(0);
+const bulkError             = ref("");
+const bulkResultMessage     = ref("");
 
 // 権限のあるユーザーのみ割当変更が可能（MainMenuViewの「グループページ」表示条件と同じ閾値）
 const canAssign = computed(() => authStore.userRole >= 1010);
@@ -326,7 +419,11 @@ async function fetchData() {
       getGroupChildList(authStore.userGroup),
       getMinisterOptions(authStore.userGroup),
     ]);
-    if (cardsRes.status === "success")     cards.value     = cardsRes.cards     || [];
+    if (cardsRes.status === "success") {
+      cards.value = cardsRes.cards || [];
+      const stillExists = new Set(cards.value.map(c => c.CHILDID));
+      selectedChildIds.value = selectedChildIds.value.filter(id => stillExists.has(id));
+    }
     if (ministersRes.status === "success") ministers.value = ministersRes.ministers || [];
   } catch (e) {
     console.error(e);
@@ -487,6 +584,132 @@ async function cancelCheckout() {
   } finally {
     assigning.value = false;
   }
+}
+
+// 一括貸出モーダルを開く（選択中のカードから初期値を推測する）
+function openBulkCheckoutModal() {
+  if (selectedChildIds.value.length === 0) return;
+  bulkMinisterId.value     = "";
+  bulkCheckoutDate.value   = new Date().toISOString().slice(0, 10);
+  bulkLimitDate.value      = "";
+  bulkDescription.value    = "";
+  bulkError.value          = "";
+  bulkResultMessage.value  = "";
+  showBulkCheckoutModal.value = true;
+}
+
+function closeBulkCheckoutModal() {
+  showBulkCheckoutModal.value = false;
+}
+
+// 一括貸出：選択中のうち「貸出可能」「返却済」（かつ期限内）のカードにのみ、同じ内容で貸出登録する
+async function submitBulkCheckout() {
+  if (!bulkMinisterId.value) {
+    bulkError.value = "貸し出す奉仕者名を選択してください。";
+    return;
+  }
+  if (bulkCheckoutDate.value && bulkLimitDate.value && bulkCheckoutDate.value > bulkLimitDate.value) {
+    bulkError.value = "期限日は貸出日以降に設定してください。";
+    return;
+  }
+
+  const targets = cards.value.filter(c => selectedChildIds.value.includes(c.CHILDID));
+  const eligible = targets.filter(isCheckoutable);
+  const skipped  = targets.length - eligible.length;
+
+  bulkProcessing.value     = true;
+  bulkProcessedCount.value = 0;
+  bulkError.value          = "";
+  bulkResultMessage.value  = "";
+  let overLimitCount = 0;
+  let failedCount     = 0;
+
+  try {
+    for (const child of eligible) {
+      // 期限日は各カードの親カード使用期限日（最大）を超えないようにする（単発貸出と同じ制約）
+      const limitDate = (child.CARDLIMITDATE && bulkLimitDate.value && bulkLimitDate.value > child.CARDLIMITDATE)
+        ? child.CARDLIMITDATE
+        : (bulkLimitDate.value || child.CHILDLIMITDATE || null);
+      if (child.CARDLIMITDATE && bulkLimitDate.value && bulkLimitDate.value > child.CARDLIMITDATE) overLimitCount++;
+
+      const res = await assignChildMinister(child.CHILDID, {
+        ministerId:   bulkMinisterId.value,
+        limitDate,
+        checkoutDate: bulkCheckoutDate.value || null,
+        description:  bulkDescription.value,
+      });
+
+      if (res.status === "success") {
+        const idx = cards.value.findIndex(c => c.CHILDID === child.CHILDID);
+        if (idx !== -1) {
+          cards.value[idx].MINISTER          = res.child?.MINISTER          ?? bulkMinisterId.value;
+          cards.value[idx].MINISTERNAME      = res.child?.MINISTERNAME      ?? (ministers.value.find(m => Number(m.ID) === Number(bulkMinisterId.value))?.UserName ?? "");
+          if (res.child?.CHILDSTATUS)        cards.value[idx].CHILDSTATUS       = res.child.CHILDSTATUS;
+          if (res.child?.CHILDSTARTDATE)     cards.value[idx].CHILDSTARTDATE    = res.child.CHILDSTARTDATE;
+          if (res.child?.CHILDLIMITDATE)     cards.value[idx].CHILDLIMITDATE    = res.child.CHILDLIMITDATE;
+          if (res.child?.CHILDCHECKOUTDATE)  cards.value[idx].CHILDCHECKOUTDATE = res.child.CHILDCHECKOUTDATE;
+          cards.value[idx].DESCRIPTION = res.child?.DESCRIPTION ?? bulkDescription.value;
+        }
+        delete historyCache.value[child.CHILDID];
+      } else {
+        failedCount++;
+      }
+      bulkProcessedCount.value++;
+    }
+
+    const parts = [`${eligible.length - failedCount}件を貸出しました`];
+    if (skipped > 0)      parts.push(`${skipped}件は貸出可能でないためスキップしました`);
+    if (overLimitCount > 0) parts.push(`${overLimitCount}件は期限日を親カードの上限に合わせました`);
+    if (failedCount > 0)  parts.push(`${failedCount}件は失敗しました`);
+    bulkResultMessage.value = parts.join("／");
+
+    if (failedCount === 0) {
+      selectedChildIds.value = [];
+      closeBulkCheckoutModal();
+    }
+  } catch (e) {
+    bulkError.value = e.message;
+  } finally {
+    bulkProcessing.value = false;
+  }
+}
+
+// 一括返却：選択中のうち「貸出中」のカードのみ返却する
+async function bulkReturn() {
+  if (selectedChildIds.value.length === 0) return;
+
+  const targets  = cards.value.filter(c => selectedChildIds.value.includes(c.CHILDID));
+  const eligible = targets.filter(c => c.CHILDSTATUS === "貸出中");
+  const skipped  = targets.length - eligible.length;
+
+  if (eligible.length === 0) {
+    alert("選択したカードの中に、貸出中のものがありません。");
+    return;
+  }
+  if (!confirm(`${eligible.length}件のカードを返却します。よろしいですか？${skipped > 0 ? `（貸出中でない${skipped}件はスキップされます）` : ""}`)) return;
+
+  let failedCount = 0;
+  for (const child of eligible) {
+    try {
+      const res = await returnChildCard(child.CHILDID);
+      if (res.status === "success") {
+        const idx = cards.value.findIndex(c => c.CHILDID === child.CHILDID);
+        if (idx !== -1) {
+          cards.value[idx].CHILDSTATUS       = res.child?.CHILDSTATUS ?? "返却済";
+          cards.value[idx].CHILDCHECKOUTDATE = res.child?.CHILDCHECKOUTDATE ?? cards.value[idx].CHILDCHECKOUTDATE;
+        }
+        delete historyCache.value[child.CHILDID];
+      } else {
+        failedCount++;
+      }
+    } catch (e) {
+      console.error(e);
+      failedCount++;
+    }
+  }
+
+  selectedChildIds.value = [];
+  if (failedCount > 0) alert(`${failedCount}件の返却に失敗しました。`);
 }
 
 onMounted(fetchData);
