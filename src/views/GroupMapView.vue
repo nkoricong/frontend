@@ -32,12 +32,24 @@
     </div>
 
     <div class="d-flex justify-content-between align-items-end mb-2 mx-2 flex-wrap gap-2">
-      <div>
-        <label class="form-label small mb-0">奉仕者で絞り込み</label>
-        <select class="form-select form-select-sm" v-model="filterMinisterId">
-          <option value="">全奉仕者</option>
-          <option v-for="m in ministers" :key="m.ID" :value="m.ID">{{ m.UserName }}</option>
-        </select>
+      <div class="d-flex align-items-end gap-3 flex-wrap">
+        <div>
+          <label class="form-label small mb-0">奉仕者で絞り込み</label>
+          <select class="form-select form-select-sm" v-model="filterMinisterId">
+            <option value="">全奉仕者</option>
+            <option v-for="m in ministers" :key="m.ID" :value="m.ID">{{ m.UserName }}</option>
+          </select>
+        </div>
+        <div class="form-check">
+          <input
+            type="checkbox"
+            class="form-check-input"
+            id="includeAvailable"
+            v-model="includeAvailableInFilter"
+            :disabled="!filterMinisterId"
+          >
+          <label class="form-check-label small" for="includeAvailable">貸出可能なカードも併せて表示する</label>
+        </div>
       </div>
       <GroupViewSwitcher :current="GROUP_VIEWS.GROUP_MAP" />
     </div>
@@ -45,7 +57,8 @@
     <!-- 凡例 -->
     <div class="d-flex flex-wrap gap-3 align-items-center small mb-2 mx-2">
       <span><span class="legend-swatch" style="background:rgba(255,235,59,0.25); border-color:#FBC02D;"></span> 貸出中</span>
-      <span><span class="legend-swatch" style="border-color:#1976D2;"></span> 貸出可能</span>
+      <span><span class="legend-swatch" style="background:rgba(76,175,80,0.25); border-color:#388E3C;"></span> 貸出可能</span>
+      <span><span class="legend-swatch" style="background:rgba(0,150,136,0.25); border-color:#00796B;"></span> 返却済（期限内）</span>
       <span><span class="legend-swatch" style="border-color:#9E9E9E;"></span> その他（操作不可）</span>
     </div>
 
@@ -150,6 +163,7 @@ const cards           = ref([]);
 const ministers       = ref([]);
 const mapContainer    = ref(null);
 const filterMinisterId = ref(""); // #112: 空なら全件表示
+const includeAvailableInFilter = ref(false); // #113: 絞り込み中も貸出可能・返却済（期限内）を併せて表示するか
 
 let mapInstance = null;
 const polygonsByKey  = new Map(); // "CardNo-ChildNo" -> [{lat,lng}]
@@ -167,7 +181,11 @@ function styleForChild(child) {
     return { fillColor: "#FFEB3B", fillOpacity: 0.25, strokeColor: "#FBC02D", strokeWeight: 2, clickable: true };
   }
   if (isCheckoutable(child)) {
-    return { fillColor: "#1976D2", fillOpacity: 0, strokeColor: "#1976D2", strokeWeight: 2, clickable: true };
+    // 貸出可能＝緑、返却済＝青緑（いずれも透過率75%で塗りつぶし）（#113）
+    if (child.CHILDSTATUS === "貸出可能") {
+      return { fillColor: "#4CAF50", fillOpacity: 0.25, strokeColor: "#388E3C", strokeWeight: 2, clickable: true };
+    }
+    return { fillColor: "#009688", fillOpacity: 0.25, strokeColor: "#00796B", strokeWeight: 2, clickable: true };
   }
   return { fillColor: "#9E9E9E", fillOpacity: 0, strokeColor: "#9E9E9E", strokeWeight: 1, clickable: false };
 }
@@ -240,7 +258,8 @@ function applyMinisterFilter() {
     if (!polygon) continue;
 
     const visible = !filterMinisterId.value
-      || (child.CHILDSTATUS === "貸出中" && Number(child.MINISTER) === Number(filterMinisterId.value));
+      || (child.CHILDSTATUS === "貸出中" && Number(child.MINISTER) === Number(filterMinisterId.value))
+      || (includeAvailableInFilter.value && isCheckoutable(child));
     polygon.setVisible(visible);
     if (visible) polygon.getPath().forEach(latLng => bounds.extend(latLng));
   }
@@ -248,7 +267,7 @@ function applyMinisterFilter() {
   if (!bounds.isEmpty()) mapInstance.fitBounds(bounds);
 }
 
-watch(filterMinisterId, applyMinisterFilter);
+watch([filterMinisterId, includeAvailableInFilter], applyMinisterFilter);
 
 async function fetchData() {
   loading.value = true;
