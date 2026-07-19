@@ -198,11 +198,14 @@
                   </select>
                 </div>
                 <div class="col-sm-4">
-                  <label class="form-label">建物種別</label>
+                  <label class="form-label">建物種別（この住戸自体の種別）</label>
                   <div class="d-flex align-items-center gap-2">
                     <i v-if="buildingIconClass(editForm.BuildingCategory)" class="fas text-secondary" :class="buildingIconClass(editForm.BuildingCategory)"></i>
-                    <input type="text" class="form-control" :value="editForm.BuildingCategory" disabled>
+                    <select class="form-select" v-model="editForm.BuildingCategory">
+                      <option v-for="b in BuildKinds" :key="b" :value="b">{{ b }}</option>
+                    </select>
                   </div>
+                  <div class="form-text">建物マスタの種別（{{ selectedBuildingMasterCategory }}）とは別に、この住戸自体の種別（店舗・事務所など）を設定できます。</div>
                 </div>
                 <div class="col-sm-4">
                   <label class="form-label">建物名</label>
@@ -483,8 +486,10 @@
                     </select>
                   </div>
                   <div class="col-sm-4">
-                    <label class="form-label">建物種別</label>
-                    <input type="text" class="form-control" :value="bulkForm.building.BuildingCategory" disabled>
+                    <label class="form-label">建物種別（住戸自体の種別）</label>
+                    <select class="form-select" v-model="bulkForm.building.BuildingCategory">
+                      <option v-for="b in BuildKinds" :key="b" :value="b">{{ b }}</option>
+                    </select>
                   </div>
                   <div class="col-sm-4">
                     <label class="form-label">建物名</label>
@@ -719,6 +724,7 @@ import { ref, reactive, computed, onMounted, nextTick } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/store/authStore.js";
 import { buildingIconClass } from "@/utils/buildingIcons.js";
+import { BUILD_KINDS } from "@/utils/buildingKinds.js";
 import { groupHousesByBuilding } from "@/utils/buildingGroups.js";
 import { loadGoogleMaps, createMap, addMarker } from "@/services/maps.js";
 import { resolveMapCenter } from "@/services/mapCenter.js";
@@ -789,7 +795,7 @@ const editForm  = ref({});
 
 // 選択肢（legacy EditDetailList.html の定数をそのまま踏襲）
 const CardKinds      = ["家から家", "オートロック", "商店・会社"];
-const BuildKinds      = ["戸建て", "長屋", "アパート", "マンション", "オートロック", "寮", "店舗", "事務所", "工場", "倉庫", "各種施設", "駐車場", "空地", "空き家", "その他"];
+const BuildKinds      = BUILD_KINDS;
 const TelSourceKinds  = ["ハローページ", "タウンページ", "公式ウェブサイト", "民間の情報サイト等", "看板・掲示物", "チラシ・広告", "公式情報", "官公庁/公共団体の公開情報", "直接入手", "未確認", "過去リストから移行", "その他"];
 const NGStatus        = ["可", "不可", "訪問不可"];
 const NGCheckSels     = ["未確認", "確認済"];
@@ -1005,6 +1011,9 @@ function onBulkBanchiChange() {
 function onBulkBuildingMasterChange() {
   const b = buildingMasterOptions.value.find(b => b.BuildingNo === bulkForm.value.building.BuildingNo);
   if (b) {
+    // 建物種別(#106)は建物マスタとは別物として扱う。一括編集フォームには
+    // 「既存の住戸の値」という概念が無い（毎回まっさらな指示を組み立てる）ため、
+    // 単純に建物マスタの種別を初期値として提案する（選択後は自由に変更できる）。
     bulkForm.value.building.BuildingCategory = b.BuildingCategory;
     bulkForm.value.building.BuildingName     = b.BuildingName;
     bulkForm.value.building.Floors           = b.Floors;
@@ -1335,6 +1344,12 @@ function onBanchiChange() {
 const buildingMasterOptions = ref([]);
 let buildingMasterLoaded = false;
 
+// 建物マスタ自体の種別（#106：住戸側の建物種別と別物であることを画面上でわかりやすくするための参考表示）
+const selectedBuildingMasterCategory = computed(() => {
+  const b = buildingMasterOptions.value.find(b => b.BuildingNo === editForm.value.BuildingNo);
+  return b?.BuildingCategory || "-";
+});
+
 async function ensureBuildingMasterLoaded() {
   if (buildingMasterLoaded) return;
   buildingMasterLoaded = true;
@@ -1349,10 +1364,13 @@ async function ensureBuildingMasterLoaded() {
 function onBuildingMasterChange() {
   const b = buildingMasterOptions.value.find(b => b.BuildingNo === editForm.value.BuildingNo);
   if (b) {
-    editForm.value.BuildingCategory = b.BuildingCategory;
-    editForm.value.BuildingName     = b.BuildingName;
-    editForm.value.Floors           = b.Floors;
-    editForm.value.Rooms            = b.Rooms;
+    // 建物種別(#106)は建物マスタとは別物として扱うため、住戸側が未設定のときの
+    // 初期値として提案するだけにとどめ、既に設定済みの値は上書きしない
+    // （マンション内の店舗・事務所などをそれぞれの種別のまま残せるようにする）。
+    if (!editForm.value.BuildingCategory) editForm.value.BuildingCategory = b.BuildingCategory;
+    editForm.value.BuildingName = b.BuildingName;
+    editForm.value.Floors       = b.Floors;
+    editForm.value.Rooms        = b.Rooms;
   }
 }
 

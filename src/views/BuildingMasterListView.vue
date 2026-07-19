@@ -363,6 +363,7 @@ import {
   getKibanNearest,
 } from "@/services/api.js";
 import { buildingIconClass } from "@/utils/buildingIcons.js";
+import { BUILD_KINDS } from "@/utils/buildingKinds.js";
 import { loadGoogleMaps, createMap, addMarker } from "@/services/maps.js";
 import { resolveMapCenter } from "@/services/mapCenter.js";
 import { buildCsv, downloadCsv, parseCsvWithHeader } from "@/utils/csv.js";
@@ -386,7 +387,7 @@ const backfillTotal    = ref(0);
 const BACKFILL_PAGE_SIZE = 300;
 const COMMIT_CHUNK_SIZE  = 50; // 1回のcommit呼び出しで書き込む建物グループ数
 
-const BuildKinds = ["戸建て", "長屋", "アパート", "マンション", "オートロック", "寮", "店舗", "事務所", "工場", "倉庫", "各種施設", "駐車場", "空地", "空き家", "その他"];
+const BuildKinds = BUILD_KINDS;
 const NGStatus    = ["可", "不可"];
 const NGCheckSels = ["未確認", "確認済"];
 

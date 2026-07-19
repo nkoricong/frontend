@@ -219,6 +219,7 @@ import { ref, computed, watch, nextTick } from "vue";
 import { upsertDetail, getKibanTowns, getKibanChoList, getKibanBanchiList, getKibanNearest } from "@/services/api.js";
 import { useAuthStore } from "@/store/authStore.js";
 import { buildingIconClass } from "@/utils/buildingIcons.js";
+import { BUILD_KINDS } from "@/utils/buildingKinds.js";
 import { loadGoogleMaps, createMap, addMarker } from "@/services/maps.js";
 import { resolveMapCenter } from "@/services/mapCenter.js";
 
@@ -233,11 +234,7 @@ const emit = defineEmits(["update:modelValue", "saved"]);
 
 const authStore = useAuthStore();
 
-// ORIGINAL/ChildMap.html・EditDetailList.html のBuildKinds/TelSourceKindsを踏襲
-const BUILD_KINDS = [
-  "戸建て", "長屋", "アパート", "マンション", "オートロック", "寮",
-  "店舗", "事務所", "工場", "倉庫", "各種施設", "駐車場", "空地", "空き家", "その他",
-];
+// ORIGINAL/ChildMap.html・EditDetailList.html のTelSourceKindsを踏襲
 const TEL_SOURCE_KINDS = [
   "-選択-", "ハローページ", "タウンページ", "公式ウェブサイト", "民間の情報サイト等",
   "看板・掲示物", "チラシ・広告", "公式情報", "官公庁/公共団体の公開情報",
