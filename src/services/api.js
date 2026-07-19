@@ -253,6 +253,11 @@ export async function cancelChildCheckout(childId) {
   return callWorker({ funcName: "cancelChildCheckout", ChildID: childId });
 }
 
+/** 子カードの貸出履歴一覧を取得する */
+export async function getChildUsageHistory(cardNo, childNo) {
+  return callWorker({ funcName: "getChildUsageHistory", CardNo: cardNo, ChildNo: childNo });
+}
+
 /** 子カードの共有用ワンタイムトークンを発行する */
 export async function createChildShare(childId) {
   return callWorker({ funcName: "createChildShare", ChildID: childId });

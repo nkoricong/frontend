@@ -112,21 +112,40 @@
               （親カード期限：{{ child.CARDLIMITDATE }}）
             </p>
 
-            <div class="d-flex justify-content-end gap-2 mt-2" v-if="canAssign">
-              <button
-                v-if="isCheckoutable(child)"
-                class="btn btn-sm btn-warning"
-                @click.stop="openCheckoutModal(child)"
-              >
-                <i class="fas fa-hand-holding"></i> 貸出
+            <div class="d-flex justify-content-between align-items-center mt-2">
+              <button class="btn btn-link btn-sm p-0" @click.stop="toggleHistory(child)">
+                履歴{{ expandedChildId === child.CHILDID ? "▲" : "▼" }}
               </button>
-              <button
-                v-else-if="child.CHILDSTATUS === '貸出中'"
-                class="btn btn-sm btn-success"
-                @click.stop="returnCard(child)"
-              >
-                <i class="fas fa-undo"></i> 返却
-              </button>
+              <div class="d-flex gap-2" v-if="canAssign">
+                <button
+                  v-if="isCheckoutable(child)"
+                  class="btn btn-sm btn-warning"
+                  @click.stop="openCheckoutModal(child)"
+                >
+                  <i class="fas fa-hand-holding"></i> 貸出
+                </button>
+                <button
+                  v-else-if="child.CHILDSTATUS === '貸出中'"
+                  class="btn btn-sm btn-success"
+                  @click.stop="returnCard(child)"
+                >
+                  <i class="fas fa-undo"></i> 返却
+                </button>
+              </div>
+            </div>
+
+            <div v-if="expandedChildId === child.CHILDID" class="mt-2 border-top pt-2" @click.stop>
+              <div v-if="historyLoading === child.CHILDID" class="text-center text-muted small py-1">
+                <i class="fas fa-spinner fa-spin"></i> 読み込み中...
+              </div>
+              <template v-else>
+                <div v-if="(historyCache[child.CHILDID] || []).length === 0" class="small text-muted">貸出記録がありません</div>
+                <div v-for="h in (historyCache[child.CHILDID] || [])" :key="h.ID" class="small border-bottom py-1">
+                  {{ h.Status }}／{{ h.MinisterName || "-" }}<br />
+                  貸出:{{ h.CheckoutDate || "-" }} ／ 期限:{{ h.LimitDate || "-" }} ／ 返却:{{ h.ReturnDate || "-" }}
+                  <span v-if="h.Description">／{{ h.Description }}</span>
+                </div>
+              </template>
             </div>
 
           </div>
@@ -221,7 +240,7 @@ import { useRouter } from "vue-router";
 import { useAuthStore } from "@/store/authStore.js";
 import {
   getGroupChildList, getMinisterOptions, assignChildMinister,
-  returnChildCard, cancelChildCheckout,
+  returnChildCard, cancelChildCheckout, getChildUsageHistory,
 } from "@/services/api.js";
 
 const router    = useRouter();
@@ -243,6 +262,11 @@ const assignLimitDate    = ref("");
 const assignDescription  = ref("");
 const assigning          = ref(false);
 const assignError        = ref("");
+
+// 貸出履歴アコーディオン（一度に1件のみ展開。CardListView.vueと同じ挙動）
+const expandedChildId = ref(null);
+const historyCache    = ref({});
+const historyLoading  = ref(null);
 
 // 権限のあるユーザーのみ割当変更が可能（MainMenuViewの「グループページ」表示条件と同じ閾値）
 const canAssign = computed(() => authStore.userRole >= 1010);
@@ -315,6 +339,27 @@ async function refresh() {
   await fetchData();
 }
 
+// 貸出履歴アコーディオンの開閉（一度に1件のみ展開）
+async function toggleHistory(child) {
+  if (expandedChildId.value === child.CHILDID) {
+    expandedChildId.value = null;
+    return;
+  }
+  expandedChildId.value = child.CHILDID;
+  if (historyCache.value[child.CHILDID]) return;
+
+  historyLoading.value = child.CHILDID;
+  try {
+    const res = await getChildUsageHistory(child.CARDNO, child.CHILDNO);
+    historyCache.value[child.CHILDID] = res.status === "success" ? res.history : [];
+  } catch (e) {
+    console.error(e);
+    historyCache.value[child.CHILDID] = [];
+  } finally {
+    historyLoading.value = null;
+  }
+}
+
 function openChildMap(child) {
   router.push({
     name:   "childMap",
@@ -355,6 +400,7 @@ async function returnCard(child) {
         cards.value[idx].CHILDSTATUS       = res.child?.CHILDSTATUS ?? "返却済";
         cards.value[idx].CHILDCHECKOUTDATE = res.child?.CHILDCHECKOUTDATE ?? cards.value[idx].CHILDCHECKOUTDATE;
       }
+      delete historyCache.value[child.CHILDID];
     } else {
       alert(res.message || "返却に失敗しました");
     }
@@ -403,6 +449,7 @@ async function submitAssign() {
         if (res.child?.CHILDCHECKOUTDATE)  cards.value[idx].CHILDCHECKOUTDATE = res.child.CHILDCHECKOUTDATE;
         cards.value[idx].DESCRIPTION = res.child?.DESCRIPTION ?? assignDescription.value;
       }
+      delete historyCache.value[assignTarget.value.CHILDID];
       closeAssignModal();
     } else {
       assignError.value = res.message || "更新に失敗しました";
@@ -430,6 +477,7 @@ async function cancelCheckout() {
         cards.value[idx].MINISTERNAME      = res.child?.MINISTERNAME      ?? "";
         cards.value[idx].CHILDCHECKOUTDATE = res.child?.CHILDCHECKOUTDATE ?? cards.value[idx].CHILDCHECKOUTDATE;
       }
+      delete historyCache.value[assignTarget.value.CHILDID];
       closeAssignModal();
     } else {
       assignError.value = res.message || "取消に失敗しました";

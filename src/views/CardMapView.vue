@@ -66,32 +66,62 @@
               <th class="col-people">グループ｜奉仕者</th>
               <th class="col-date">貸出日／期限</th>
               <th class="col-visited">訪問済</th>
+              <th class="col-history">履歴</th>
             </tr>
           </thead>
           <tbody>
-            <tr
-              v-for="child in childs"
-              :key="child.ChildID"
-              style="cursor:pointer"
-              @click="openChildMap(child)"
-            >
-              <td class="text-center fw-bold">{{ child.CardNo }}-{{ child.ChildNo }}</td>
-              <td>
-                {{ child.ChildBlock }}
-                <span class="small text-muted">({{ child.ChildHouses }}件)</span>
-              </td>
-              <td class="text-center">
-                <span :class="statusBadgeClass(child.ChildStatus)">{{ child.ChildStatus }}</span>
-              </td>
-              <td v-if="child.ChildStatus === '貸出中'">
-                {{ child.ChildGroup }} ｜ {{ child.ChildMinister }}
-              </td>
-              <td v-else></td>
-              <td class="small text-center">
-                {{ child.ChildCheckoutDate ?? "-" }} ／ {{ child.ChildLimitDate ?? "-" }}
-              </td>
-              <td class="text-center">{{ child.Visited ?? 0 }}</td>
-            </tr>
+            <template v-for="child in childs" :key="child.ChildID">
+              <tr style="cursor:pointer" @click="openChildMap(child)">
+                <td class="text-center fw-bold">{{ child.CardNo }}-{{ child.ChildNo }}</td>
+                <td>
+                  {{ child.ChildBlock }}
+                  <span class="small text-muted">({{ child.ChildHouses }}件)</span>
+                </td>
+                <td class="text-center">
+                  <span :class="statusBadgeClass(child.ChildStatus)">{{ child.ChildStatus }}</span>
+                </td>
+                <td v-if="child.ChildStatus === '貸出中'">
+                  {{ child.ChildGroup }} ｜ {{ child.ChildMinister }}
+                </td>
+                <td v-else></td>
+                <td class="small text-center">
+                  {{ child.ChildCheckoutDate ?? "-" }} ／ {{ child.ChildLimitDate ?? "-" }}
+                </td>
+                <td class="text-center">{{ child.Visited ?? 0 }}</td>
+                <td class="text-center">
+                  <button class="btn btn-link btn-sm p-0" @click.stop="toggleHistory(child)">
+                    履歴{{ expandedChildId === child.ChildID ? "▲" : "▼" }}
+                  </button>
+                </td>
+              </tr>
+              <tr v-if="expandedChildId === child.ChildID">
+                <td colspan="7" class="bg-light">
+                  <div v-if="historyLoading === child.ChildID" class="text-center text-muted py-2">
+                    <i class="fas fa-spinner fa-spin"></i> 履歴を読み込み中...
+                  </div>
+                  <table v-else class="table table-sm mb-0">
+                    <thead>
+                      <tr>
+                        <th>ステータス</th><th>奉仕者</th><th>貸出日</th><th>期限日</th><th>返却日</th><th>メモ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="h in (historyCache[child.ChildID] || [])" :key="h.ID">
+                        <td>{{ h.Status }}</td>
+                        <td>{{ h.MinisterName || "-" }}</td>
+                        <td>{{ h.CheckoutDate || "-" }}</td>
+                        <td>{{ h.LimitDate || "-" }}</td>
+                        <td>{{ h.ReturnDate || "-" }}</td>
+                        <td>{{ h.Description }}</td>
+                      </tr>
+                      <tr v-if="(historyCache[child.ChildID] || []).length === 0">
+                        <td colspan="6" class="text-center text-muted">貸出記録がありません</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </td>
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>
@@ -118,6 +148,25 @@
                 <div class="small text-muted">
                   貸出: {{ child.ChildCheckoutDate ?? "-" }} ／ 期限: {{ child.ChildLimitDate ?? "-" }}
                 </div>
+
+                <div class="mt-2">
+                  <button class="btn btn-link btn-sm p-0" @click.stop="toggleHistory(child)">
+                    履歴{{ expandedChildId === child.ChildID ? "▲" : "▼" }}
+                  </button>
+                  <div v-if="expandedChildId === child.ChildID" class="mt-1 border-top pt-2" @click.stop>
+                    <div v-if="historyLoading === child.ChildID" class="text-center text-muted small py-1">
+                      <i class="fas fa-spinner fa-spin"></i> 読み込み中...
+                    </div>
+                    <template v-else>
+                      <div v-if="(historyCache[child.ChildID] || []).length === 0" class="small text-muted">貸出記録がありません</div>
+                      <div v-for="h in (historyCache[child.ChildID] || [])" :key="h.ID" class="small border-bottom py-1">
+                        {{ h.Status }}／{{ h.MinisterName || "-" }}<br />
+                        貸出:{{ h.CheckoutDate || "-" }} ／ 期限:{{ h.LimitDate || "-" }} ／ 返却:{{ h.ReturnDate || "-" }}
+                        <span v-if="h.Description">／{{ h.Description }}</span>
+                      </div>
+                    </template>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -136,7 +185,7 @@
 <script setup>
 import { ref, onMounted, nextTick } from "vue";
 import { useRouter } from "vue-router";
-import { getChildListByCard, getKmlUrl } from "@/services/api.js";
+import { getChildListByCard, getKmlUrl, getChildUsageHistory } from "@/services/api.js";
 import { loadGoogleMaps, createMap, addKmlLayer } from "@/services/maps.js";
 
 const props = defineProps({
@@ -153,6 +202,31 @@ const mapVisible   = ref(true);
 
 let mapInstance = null;
 let kmlLayer    = null;
+
+// 貸出履歴アコーディオン（一度に1件のみ展開。CardListView.vueと同じ挙動）
+const expandedChildId = ref(null);
+const historyCache    = ref({});
+const historyLoading  = ref(null);
+
+async function toggleHistory(child) {
+  if (expandedChildId.value === child.ChildID) {
+    expandedChildId.value = null;
+    return;
+  }
+  expandedChildId.value = child.ChildID;
+  if (historyCache.value[child.ChildID]) return;
+
+  historyLoading.value = child.ChildID;
+  try {
+    const res = await getChildUsageHistory(child.CardNo, child.ChildNo);
+    historyCache.value[child.ChildID] = res.status === "success" ? res.history : [];
+  } catch (e) {
+    console.error(e);
+    historyCache.value[child.ChildID] = [];
+  } finally {
+    historyLoading.value = null;
+  }
+}
 
 // ステータスの badge スタイル（AssignmentListView と同一のマッピング）
 function statusBadgeClass(status) {
@@ -254,4 +328,5 @@ onMounted(async () => {
 .col-people  { min-width: 160px; }
 .col-date    { width: 200px; text-align: center; }
 .col-visited { width: 80px;  text-align: center; }
+.col-history { width: 70px;  text-align: center; }
 </style>
