@@ -297,7 +297,10 @@
           <div class="modal-body">
             <p class="text-muted small mb-2">
               「CSVフォーマットのダウンロード」で取得したCSVと同じ列構成のファイルを選択してください。
-              BuildingNo列が空欄の行は新規追加、既存の建物マスタに存在するBuildingNoが入力された行はその建物を上書き更新します。
+              インポートを実行すると、建物マスタの内容をこのCSVの内容に完全に同期します。
+              既存の建物マスタに存在するBuildingNoが入力された行はその建物を上書き更新、
+              BuildingNo列が空欄またはまだ存在しない番号の行は新規追加、
+              逆に建物マスタには存在するがCSVに含まれていないBuildingNoは削除されます。
             </p>
             <input type="file" class="form-control" accept=".csv" @change="onImportFileChange">
             <p v-if="importParseMessage" class="mt-2 mb-0 small">{{ importParseMessage }}</p>
@@ -754,23 +757,39 @@ async function onImportFileChange(event) {
 async function runCsvImport() {
   if (importRows.value.length === 0) return;
 
-  // 既存の建物マスタに存在しないBuildingNoが指定されている行がないか、実行前にまとめて検証する
-  const existingNos = new Set(buildings.value.map(b => b.BuildingNo));
-  const invalidRow = importRows.value.find(row => row.BuildingNo && !existingNos.has(Number(row.BuildingNo)));
-  if (invalidRow) {
-    importResultOk.value = false;
-    importResultMessage.value = `BuildingNo "${invalidRow.BuildingNo}" は建物マスタに存在しません。エクスポートしたCSVを元に編集してからインポートしてください。`;
-    return;
-  }
+  // アップサート同期（#104）：
+  // ・CSVのBuildingNoが既存レコードと一致する行 → 上書き更新
+  // ・一致しない行（空欄や、既存に存在しない番号を書いた行も含む）→ 新規追加として
+  //   扱う。新規追加時のBuildingNoはCSVの記載値を使わず、常にバックエンドの
+  //   自動採番に任せる（upsertBuildingMasterは指定番号のレコードが無いと
+  //   0件更新のまま黙って成功扱いになるため、ここで判定して明示的にinsertへ倒す）。
+  // ・建物マスタに存在するがCSVに存在しないBuildingNo → 削除
+  const existingByNo = new Map(buildings.value.map(b => [b.BuildingNo, b]));
+  const matchedNos = new Set(
+    importRows.value
+      .map(row => (row.BuildingNo ? Number(row.BuildingNo) : null))
+      .filter(no => no != null && existingByNo.has(no))
+  );
+  const toDelete = buildings.value.filter(b => !matchedNos.has(b.BuildingNo));
+  const updateCount = matchedNos.size;
+  const insertCount = importRows.value.length - updateCount;
+  const deleteCount = toDelete.length;
 
-  if (!confirm(`${importRows.value.length}件をインポートします。BuildingNo列が空欄の行は新規追加、指定された行は上書き更新されます。よろしいですか？`)) return;
+  const confirmMessage =
+    `CSVの内容で建物マスタを完全に同期します。\n` +
+    `・更新：${updateCount}件\n・新規追加：${insertCount}件\n・削除：${deleteCount}件\n` +
+    (deleteCount > 0 ? `※ 建物マスタに存在するがCSVに無い${deleteCount}件は削除されます。\n` : "") +
+    `よろしいですか？`;
+  if (!confirm(confirmMessage)) return;
 
   importing.value = true;
   importedCount.value = 0;
   importResultMessage.value = "";
   try {
     for (const row of importRows.value) {
-      const payload = { BuildingNo: row.BuildingNo ? Number(row.BuildingNo) : null };
+      const no = row.BuildingNo ? Number(row.BuildingNo) : null;
+      const isUpdate = no != null && existingByNo.has(no);
+      const payload = { BuildingNo: isUpdate ? no : null };
       for (const col of CSV_COLUMNS) {
         if (col === "BuildingNo") continue;
         payload[col] = row[col] ?? "";
@@ -783,8 +802,12 @@ async function runCsvImport() {
       importedCount.value++;
     }
 
+    for (const b of toDelete) {
+      await deleteBuildingMaster(b.BuildingNo);
+    }
+
     importResultOk.value = true;
-    importResultMessage.value = `インポートが完了しました。（${importedCount.value}件）`;
+    importResultMessage.value = `インポートが完了しました。（更新${updateCount}件・新規${insertCount}件・削除${deleteCount}件）`;
     importRows.value = [];
     await fetchBuildings();
   } catch (e) {
