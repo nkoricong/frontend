@@ -31,7 +31,14 @@
       ／ グループ：{{ authStore.userGroup }} ／ 権限：{{ authStore.userRole }}
     </div>
 
-    <div class="d-flex justify-content-end mb-2 mx-2">
+    <div class="d-flex justify-content-between align-items-end mb-2 mx-2 flex-wrap gap-2">
+      <div>
+        <label class="form-label small mb-0">奉仕者で絞り込み</label>
+        <select class="form-select form-select-sm" v-model="filterMinisterId">
+          <option value="">全奉仕者</option>
+          <option v-for="m in ministers" :key="m.ID" :value="m.ID">{{ m.UserName }}</option>
+        </select>
+      </div>
       <GroupViewSwitcher :current="GROUP_VIEWS.GROUP_MAP" />
     </div>
 
@@ -124,7 +131,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from "vue";
+import { ref, onMounted, nextTick, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/store/authStore.js";
 import {
@@ -138,10 +145,11 @@ import { GROUP_VIEWS, setLastGroupView } from "@/services/groupViewPreference.js
 const router    = useRouter();
 const authStore = useAuthStore();
 
-const loading      = ref(true);
-const cards        = ref([]);
-const ministers    = ref([]);
-const mapContainer = ref(null);
+const loading         = ref(true);
+const cards           = ref([]);
+const ministers       = ref([]);
+const mapContainer    = ref(null);
+const filterMinisterId = ref(""); // #112: 空なら全件表示
 
 let mapInstance = null;
 const polygonsByKey  = new Map(); // "CardNo-ChildNo" -> [{lat,lng}]
@@ -221,6 +229,26 @@ async function initMap() {
     console.error("地図初期化エラー:", e);
   }
 }
+
+// 奉仕者フィルタ（#112）：選択中は、その奉仕者が貸出中のポリゴンだけを表示する
+function applyMinisterFilter() {
+  if (!mapInstance) return;
+
+  const bounds = new google.maps.LatLngBounds();
+  for (const child of cards.value) {
+    const polygon = polygonByChild.get(child.CHILDID);
+    if (!polygon) continue;
+
+    const visible = !filterMinisterId.value
+      || (child.CHILDSTATUS === "貸出中" && Number(child.MINISTER) === Number(filterMinisterId.value));
+    polygon.setVisible(visible);
+    if (visible) polygon.getPath().forEach(latLng => bounds.extend(latLng));
+  }
+
+  if (!bounds.isEmpty()) mapInstance.fitBounds(bounds);
+}
+
+watch(filterMinisterId, applyMinisterFilter);
 
 async function fetchData() {
   loading.value = true;

@@ -48,9 +48,12 @@
         <div class="mb-2">
           <p class="small text-muted mb-1">現在の貸出中：</p>
           <p v-if="assignedTo(minister).length === 0" class="small text-muted">なし</p>
-          <ul v-else class="small mb-0">
-            <li v-for="c in assignedTo(minister)" :key="c.CHILDID">
-              {{ c.CARDNO }}-{{ c.CHILDNO }} {{ c.CHILDBLOCK }}（期限：{{ c.CHILDLIMITDATE ?? "-" }}）
+          <ul v-else class="list-unstyled small mb-0">
+            <li v-for="c in assignedTo(minister)" :key="c.CHILDID" class="d-flex justify-content-between align-items-center py-1">
+              <span>{{ c.CARDNO }}-{{ c.CHILDNO }} {{ c.CHILDBLOCK }}（期限：{{ c.CHILDLIMITDATE ?? "-" }}）</span>
+              <button class="btn btn-sm btn-outline-success" :disabled="returning" @click="returnCard(c)">
+                <i class="fas fa-undo"></i> 返却
+              </button>
             </li>
           </ul>
         </div>
@@ -95,7 +98,7 @@
 import { ref, reactive, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/store/authStore.js";
-import { getGroupChildList, getMinisterOptions, assignChildMinister } from "@/services/api.js";
+import { getGroupChildList, getMinisterOptions, assignChildMinister, returnChildCard } from "@/services/api.js";
 import GroupViewSwitcher from "@/components/GroupViewSwitcher.vue";
 import { GROUP_VIEWS, setLastGroupView } from "@/services/groupViewPreference.js";
 
@@ -106,6 +109,7 @@ const loading   = ref(false);
 const cards     = ref([]);
 const ministers = ref([]);
 const assigning = ref(false);
+const returning = ref(false);
 
 // 奉仕者ID -> 選択中のCHILDID配列
 const selection = reactive({});
@@ -121,6 +125,28 @@ const availableCards = computed(() => cards.value.filter(isCheckoutable));
 
 function assignedTo(minister) {
   return cards.value.filter(c => c.CHILDSTATUS === "貸出中" && Number(c.MINISTER) === Number(minister.ID));
+}
+
+// 奉仕者単位の一覧から、個々の子カードを返却する（#111）
+async function returnCard(child) {
+  if (!confirm(`${child.CARDNO}-${child.CHILDNO}のカードを返却します。よろしいですか？`)) return;
+  returning.value = true;
+  try {
+    const res = await returnChildCard(child.CHILDID);
+    if (res.status === "success") {
+      const idx = cards.value.findIndex(c => c.CHILDID === child.CHILDID);
+      if (idx !== -1) {
+        cards.value[idx].CHILDSTATUS       = res.child?.CHILDSTATUS ?? "返却済";
+        cards.value[idx].CHILDCHECKOUTDATE = res.child?.CHILDCHECKOUTDATE ?? cards.value[idx].CHILDCHECKOUTDATE;
+      }
+    } else {
+      alert(res.message || "返却に失敗しました");
+    }
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    returning.value = false;
+  }
 }
 
 async function fetchData() {
