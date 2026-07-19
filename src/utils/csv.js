@@ -35,31 +35,60 @@ export function downloadCsv(content, filename) {
   URL.revokeObjectURL(url);
 }
 
-// カンマ区切り・ダブルクォート対応のCSV行パーサー
-function parseCsvLine(line) {
-  const cells = [];
+// カンマ区切り・ダブルクォート対応のCSVパーサー。
+// ダブルクォートで囲まれたセルの中の改行（セル内改行）はデータの一部として扱い、
+// 行区切りとしては解釈しない（#105：改行を含むセルがあると、行区切りだけで
+// 事前分割していた旧実装ではそこで行がずれてしまっていた）。
+function parseCsvRows(text) {
+  const rows = [];
+  let row = [];
   let cur = "";
   let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
+  let i = 0;
+  const len = text.length;
+
+  while (i < len) {
+    const ch = text[i];
     if (inQuotes) {
       if (ch === '"') {
-        if (line[i + 1] === '"') { cur += '"'; i++; }
-        else inQuotes = false;
-      } else {
-        cur += ch;
+        if (text[i + 1] === '"') { cur += '"'; i += 2; continue; }
+        inQuotes = false;
+        i++;
+        continue;
       }
-    } else if (ch === '"') {
-      inQuotes = true;
-    } else if (ch === ",") {
-      cells.push(cur);
-      cur = "";
-    } else {
       cur += ch;
+      i++;
+      continue;
     }
+    if (ch === '"') {
+      inQuotes = true;
+      i++;
+      continue;
+    }
+    if (ch === ",") {
+      row.push(cur);
+      cur = "";
+      i++;
+      continue;
+    }
+    if (ch === "\r" || ch === "\n") {
+      row.push(cur);
+      rows.push(row);
+      row = [];
+      cur = "";
+      i += (ch === "\r" && text[i + 1] === "\n") ? 2 : 1;
+      continue;
+    }
+    cur += ch;
+    i++;
   }
-  cells.push(cur);
-  return cells;
+  if (cur !== "" || row.length > 0) {
+    row.push(cur);
+    rows.push(row);
+  }
+
+  // 完全に空行（列すべてが空文字）はスキップする
+  return rows.filter(r => !(r.length === 1 && r[0] === ""));
 }
 
 /**
@@ -69,11 +98,10 @@ function parseCsvLine(line) {
  * @returns {Array<Object<string, string>>}
  */
 export function parseCsvWithHeader(text) {
-  const lines = text.split(/\r\n|\r|\n/).filter(l => l.length > 0);
-  if (lines.length < 2) return [];
-  const header = parseCsvLine(lines[0]).map(h => h.trim());
-  return lines.slice(1).map(line => {
-    const cells = parseCsvLine(line);
+  const rows = parseCsvRows(text);
+  if (rows.length < 2) return [];
+  const header = rows[0].map(h => h.trim());
+  return rows.slice(1).map(cells => {
     const obj = {};
     header.forEach((col, i) => { obj[col] = (cells[i] ?? "").trim(); });
     return obj;
