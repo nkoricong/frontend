@@ -233,9 +233,9 @@
 
               <div class="col-6 col-md-3">
                 <label class="form-label small">担当者(手配者)</label>
-                <select class="form-select form-select-sm" v-model.number="form.Arrenger">
+                <select class="form-select form-select-sm" v-model="form.Arrenger">
                   <option :value="null">-選択-</option>
-                  <option v-for="u in userOptions" :key="u.ID" :value="u.ID">{{ u.UserName }}</option>
+                  <option v-for="u in userOptions" :key="u.UserID" :value="u.UserID">{{ u.UserName }}</option>
                 </select>
               </div>
 

@@ -37,7 +37,7 @@
           <label class="form-label small mb-0">奉仕者で絞り込み</label>
           <select class="form-select form-select-sm" v-model="filterMinisterId">
             <option value="">全奉仕者</option>
-            <option v-for="m in ministers" :key="m.ID" :value="m.ID">{{ m.UserName }}</option>
+            <option v-for="m in ministers" :key="m.UserID" :value="m.UserID">{{ m.UserName }}</option>
           </select>
         </div>
         <div class="form-check">
@@ -96,7 +96,7 @@
               <div class="col-6">
                 <select class="form-select form-select-sm" v-model="mapMinisterId">
                   <option value="">-選択-</option>
-                  <option v-for="m in ministers" :key="m.ID" :value="m.ID">{{ m.UserName }}</option>
+                  <option v-for="m in ministers" :key="m.UserID" :value="m.UserID">{{ m.UserName }}</option>
                 </select>
               </div>
               <div class="col-6">貸出日</div>
@@ -258,7 +258,7 @@ function applyMinisterFilter() {
     if (!polygon) continue;
 
     const visible = !filterMinisterId.value
-      || (child.CHILDSTATUS === "貸出中" && Number(child.MINISTER) === Number(filterMinisterId.value))
+      || (child.CHILDSTATUS === "貸出中" && child.MINISTER === filterMinisterId.value)
       || (includeAvailableInFilter.value && isCheckoutable(child));
     polygon.setVisible(visible);
     if (visible) polygon.getPath().forEach(latLng => bounds.extend(latLng));
@@ -344,7 +344,7 @@ async function assignFromMap() {
       const idx = cards.value.findIndex(c => c.CHILDID === mapActionTarget.value.CHILDID);
       if (idx !== -1) {
         cards.value[idx].MINISTER          = res.child?.MINISTER          ?? mapMinisterId.value;
-        cards.value[idx].MINISTERNAME      = res.child?.MINISTERNAME      ?? (ministers.value.find(m => Number(m.ID) === Number(mapMinisterId.value))?.UserName ?? "");
+        cards.value[idx].MINISTERNAME      = res.child?.MINISTERNAME      ?? (ministers.value.find(m => m.UserID === mapMinisterId.value)?.UserName ?? "");
         if (res.child?.CHILDSTATUS)        cards.value[idx].CHILDSTATUS       = res.child.CHILDSTATUS;
         if (res.child?.CHILDCHECKOUTDATE)  cards.value[idx].CHILDCHECKOUTDATE = res.child.CHILDCHECKOUTDATE;
         if (res.child?.CHILDLIMITDATE)     cards.value[idx].CHILDLIMITDATE    = res.child.CHILDLIMITDATE;

@@ -228,14 +228,14 @@
                 <label class="form-label small">手配者</label>
                 <select class="form-select form-select-sm" v-model="form.arrenger">
                   <option :value="null">-選択-</option>
-                  <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}</option>
+                  <option v-for="u in users" :key="u.UserID" :value="u.UserID">{{ u.UserName }}</option>
                 </select>
               </div>
               <div class="col-6">
                 <label class="form-label small">担当者</label>
                 <select class="form-select form-select-sm" v-model="form.minister">
                   <option :value="null">-選択-</option>
-                  <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}</option>
+                  <option v-for="u in users" :key="u.UserID" :value="u.UserID">{{ u.UserName }}</option>
                 </select>
               </div>
 
@@ -400,9 +400,9 @@ function emptyForm() {
 
 const form = reactive(emptyForm());
 
-function userName(id) {
-  if (!id) return "-";
-  return users.value.find(u => Number(u.ID) === Number(id))?.UserName ?? id;
+function userName(userId) {
+  if (!userId) return "-";
+  return users.value.find(u => u.UserID === userId)?.UserName ?? userId;
 }
 
 function statusBadgeClass(status) {

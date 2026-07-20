@@ -41,7 +41,7 @@
         <label class="form-label small mb-0">奉仕者</label>
         <select class="form-select form-select-sm" v-model="filterMinisterId">
           <option value="">全奉仕者</option>
-          <option v-for="m in ministers" :key="m.ID" :value="m.ID">{{ m.UserName }}</option>
+          <option v-for="m in ministers" :key="m.UserID" :value="m.UserID">{{ m.UserName }}</option>
         </select>
       </div>
       <div class="col-auto">
@@ -219,7 +219,7 @@
             <div class="col-6">
               <select class="form-select form-select-sm" v-model="selectedMinisterId">
                 <option value="">-選択-</option>
-                <option v-for="m in ministers" :key="m.ID" :value="m.ID">{{ m.UserName }}</option>
+                <option v-for="m in ministers" :key="m.UserID" :value="m.UserID">{{ m.UserName }}</option>
               </select>
             </div>
 
@@ -291,7 +291,7 @@
             <div class="col-6">
               <select class="form-select form-select-sm" v-model="bulkMinisterId">
                 <option value="">-選択-</option>
-                <option v-for="m in ministers" :key="m.ID" :value="m.ID">{{ m.UserName }}</option>
+                <option v-for="m in ministers" :key="m.UserID" :value="m.UserID">{{ m.UserName }}</option>
               </select>
             </div>
 
@@ -387,7 +387,7 @@ const canCsv = computed(() => authStore.userRole >= 1100);
 
 const filteredCards = computed(() => {
   return cards.value.filter(c => {
-    if (filterMinisterId.value && Number(c.MINISTER) !== Number(filterMinisterId.value)) return false;
+    if (filterMinisterId.value && c.MINISTER !== filterMinisterId.value) return false;
     if (filterStatus.value && c.CHILDSTATUS !== filterStatus.value) return false;
     if (overdueOnly.value && !isOverdue(c)) return false;
     return true;
@@ -560,7 +560,7 @@ async function submitAssign() {
       const idx = cards.value.findIndex(c => c.CHILDID === assignTarget.value.CHILDID);
       if (idx !== -1) {
         cards.value[idx].MINISTER          = res.child?.MINISTER          ?? (selectedMinisterId.value || null);
-        cards.value[idx].MINISTERNAME      = res.child?.MINISTERNAME      ?? (ministers.value.find(m => Number(m.ID) === Number(selectedMinisterId.value))?.UserName ?? "");
+        cards.value[idx].MINISTERNAME      = res.child?.MINISTERNAME      ?? (ministers.value.find(m => m.UserID === selectedMinisterId.value)?.UserName ?? "");
         if (res.child?.CHILDSTATUS)        cards.value[idx].CHILDSTATUS       = res.child.CHILDSTATUS;
         if (res.child?.CHILDSTARTDATE)     cards.value[idx].CHILDSTARTDATE    = res.child.CHILDSTARTDATE;
         if (res.child?.CHILDLIMITDATE)     cards.value[idx].CHILDLIMITDATE    = res.child.CHILDLIMITDATE;
@@ -671,7 +671,7 @@ async function submitBulkCheckout() {
         const idx = cards.value.findIndex(c => c.CHILDID === child.CHILDID);
         if (idx !== -1) {
           cards.value[idx].MINISTER          = res.child?.MINISTER          ?? bulkMinisterId.value;
-          cards.value[idx].MINISTERNAME      = res.child?.MINISTERNAME      ?? (ministers.value.find(m => Number(m.ID) === Number(bulkMinisterId.value))?.UserName ?? "");
+          cards.value[idx].MINISTERNAME      = res.child?.MINISTERNAME      ?? (ministers.value.find(m => m.UserID === bulkMinisterId.value)?.UserName ?? "");
           if (res.child?.CHILDSTATUS)        cards.value[idx].CHILDSTATUS       = res.child.CHILDSTATUS;
           if (res.child?.CHILDSTARTDATE)     cards.value[idx].CHILDSTARTDATE    = res.child.CHILDSTARTDATE;
           if (res.child?.CHILDLIMITDATE)     cards.value[idx].CHILDLIMITDATE    = res.child.CHILDLIMITDATE;

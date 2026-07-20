@@ -41,7 +41,7 @@
     </p>
 
     <!-- 奉仕者一覧 -->
-    <div v-for="minister in ministers" :key="minister.ID" class="card shadow-sm mb-3">
+    <div v-for="minister in ministers" :key="minister.UserID" class="card shadow-sm mb-3">
       <div class="card-body">
         <h5 class="card-title">{{ minister.UserName }}</h5>
 
@@ -65,21 +65,21 @@
               <input
                 type="checkbox"
                 class="form-check-input"
-                :id="`m${minister.ID}-c${c.CHILDID}`"
+                :id="`m${minister.UserID}-c${c.CHILDID}`"
                 :value="c.CHILDID"
-                v-model="selection[minister.ID]"
+                v-model="selection[minister.UserID]"
               >
-              <label class="form-check-label small" :for="`m${minister.ID}-c${c.CHILDID}`">
+              <label class="form-check-label small" :for="`m${minister.UserID}-c${c.CHILDID}`">
                 {{ c.CARDNO }}-{{ c.CHILDNO }} {{ c.CHILDBLOCK }}
               </label>
             </div>
           </div>
           <button
             class="btn btn-sm btn-warning"
-            :disabled="(selection[minister.ID] || []).length === 0 || assigning"
+            :disabled="(selection[minister.UserID] || []).length === 0 || assigning"
             @click="assignSelected(minister)"
           >
-            <i class="fas fa-hand-holding"></i> 割当（{{ (selection[minister.ID] || []).length }}件）
+            <i class="fas fa-hand-holding"></i> 割当（{{ (selection[minister.UserID] || []).length }}件）
           </button>
         </div>
         <p v-else class="small text-muted mb-0">割り当て可能な子カードがありません。</p>
@@ -124,7 +124,7 @@ function isCheckoutable(child) {
 const availableCards = computed(() => cards.value.filter(isCheckoutable));
 
 function assignedTo(minister) {
-  return cards.value.filter(c => c.CHILDSTATUS === "貸出中" && Number(c.MINISTER) === Number(minister.ID));
+  return cards.value.filter(c => c.CHILDSTATUS === "貸出中" && c.MINISTER === minister.UserID);
 }
 
 // 奉仕者単位の一覧から、個々の子カードを返却する（#111）
@@ -159,7 +159,7 @@ async function fetchData() {
     if (cardsRes.status === "success")     cards.value     = cardsRes.cards || [];
     if (ministersRes.status === "success") ministers.value = ministersRes.ministers || [];
     for (const m of ministers.value) {
-      if (!selection[m.ID]) selection[m.ID] = [];
+      if (!selection[m.UserID]) selection[m.UserID] = [];
     }
   } catch (e) {
     console.error(e);
@@ -170,7 +170,7 @@ async function fetchData() {
 
 // 選択した子カードを、この奉仕者へ一括で貸出登録する
 async function assignSelected(minister) {
-  const ids = selection[minister.ID] || [];
+  const ids = selection[minister.UserID] || [];
   if (ids.length === 0) return;
   if (!confirm(`${ids.length}件のカードを${minister.UserName}さんに貸し出します。よろしいですか？`)) return;
 
@@ -183,7 +183,7 @@ async function assignSelected(minister) {
     for (const child of targets) {
       try {
         const res = await assignChildMinister(child.CHILDID, {
-          ministerId:   minister.ID,
+          ministerId:   minister.UserID,
           limitDate:    child.CHILDLIMITDATE || null,
           checkoutDate: today,
           description:  child.DESCRIPTION || "",
@@ -191,7 +191,7 @@ async function assignSelected(minister) {
         if (res.status === "success") {
           const idx = cards.value.findIndex(c => c.CHILDID === child.CHILDID);
           if (idx !== -1) {
-            cards.value[idx].MINISTER          = res.child?.MINISTER          ?? minister.ID;
+            cards.value[idx].MINISTER          = res.child?.MINISTER          ?? minister.UserID;
             cards.value[idx].MINISTERNAME      = res.child?.MINISTERNAME      ?? minister.UserName;
             if (res.child?.CHILDSTATUS)        cards.value[idx].CHILDSTATUS       = res.child.CHILDSTATUS;
             if (res.child?.CHILDCHECKOUTDATE)  cards.value[idx].CHILDCHECKOUTDATE = res.child.CHILDCHECKOUTDATE;
@@ -204,7 +204,7 @@ async function assignSelected(minister) {
         failedCount++;
       }
     }
-    selection[minister.ID] = [];
+    selection[minister.UserID] = [];
     if (failedCount > 0) alert(`${failedCount}件の貸出に失敗しました。`);
   } finally {
     assigning.value = false;

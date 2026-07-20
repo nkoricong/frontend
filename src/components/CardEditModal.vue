@@ -55,9 +55,9 @@
               <select
                 v-if="mode === 'checkout' || mode === 'fix'"
                 class="form-select form-select-sm"
-                v-model.number="form.Arrenger"
+                v-model="form.Arrenger"
               >
-                <option v-for="u in users" :key="u.ID" :value="u.ID">{{ u.UserName }}</option>
+                <option v-for="u in users" :key="u.UserID" :value="u.UserID">{{ u.UserName }}</option>
               </select>
               <input v-else class="form-control form-control-sm" :value="arrengerDisplayName" disabled />
             </div>
@@ -192,8 +192,8 @@ const termLabel = computed(() => (form.value.Term ? isoToTermLabel(form.value.Te
 
 // 返却モード等、責任者が読み取り専用表示になる場合はIDをユーザー名に変換して表示する
 const arrengerDisplayName = computed(() => {
-  const id = form.value.Arrenger;
-  return props.users.find(u => Number(u.ID) === Number(id))?.UserName ?? id ?? "-";
+  const userId = form.value.Arrenger;
+  return props.users.find(u => u.UserID === userId)?.UserName ?? userId ?? "-";
 });
 
 watch(() => props.modelValue, (open) => {
@@ -211,7 +211,7 @@ function initForm() {
     form.value = {
       Term:              term,
       Group:             props.groups[0] ?? c.Group,
-      Arrenger:          c.Arrenger ?? props.users[0]?.ID ?? null,
+      Arrenger:          c.Arrenger ?? props.users[0]?.UserID ?? null,
       CheckoutDate:      today,
       LimitDate:         computeLimitDate(term, c.Color),
       ReturnDate:        "",
