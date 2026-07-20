@@ -73,6 +73,7 @@
         <CsvImportExportPanel
           title="ユーザーマスタ"
           :columns="CSV_COLUMNS"
+          :batch-size="5"
           :has-delete-sync-option="true"
           format-template-filename="ユーザーマスタCSVフォーマット.csv"
           export-filename="ユーザーマスタ.csv"
