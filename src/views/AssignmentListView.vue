@@ -49,6 +49,9 @@
         <button v-if="!usingOfflineData" class="btn btn-outline-secondary" @click="openScanDialog">
           <i class="fas fa-qrcode"></i> QRコード読取
         </button>
+        <button v-if="!usingOfflineData" class="btn btn-outline-primary" @click="router.push({ name: 'myPageMap' })">
+          <i class="fas fa-map-marked-alt"></i> 地図で見る
+        </button>
       </div>
       <button class="btn btn-primary" @click="refresh" :disabled="isUpdating">
         <i class="fas fa-sync-alt"></i> 最新情報に更新

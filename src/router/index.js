@@ -37,6 +37,11 @@ const routes = [
     component: () => import("@/views/AssignmentListView.vue"),
   },
   {
+    path:      "/mypage/map",
+    name:      "myPageMap",
+    component: () => import("@/views/MyPageMapView.vue"),
+  },
+  {
     path:      "/childmap/:cardNo/:childNo",
     name:      "childMap",
     component: ChildMapView,
