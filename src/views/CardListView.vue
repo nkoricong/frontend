@@ -102,6 +102,7 @@
       <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
         <h6 class="mb-0">表示中の枚数：{{ filteredCards.length }}枚</h6>
         <CsvImportExportPanel
+          v-if="canEdit"
           title="区域カード使用履歴"
           :columns="USAGE_HISTORY_CSV_COLUMNS"
           format-template-filename="区域カード使用履歴CSVフォーマット.csv"

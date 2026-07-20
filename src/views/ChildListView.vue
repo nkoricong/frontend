@@ -67,7 +67,7 @@
       </div>
     </div>
 
-    <div class="d-flex justify-content-end mb-3">
+    <div v-if="canCsv" class="d-flex justify-content-end mb-3">
       <CsvImportExportPanel
         title="子カード使用履歴"
         :columns="USAGE_HISTORY_CSV_COLUMNS"
@@ -382,6 +382,8 @@ const bulkResultMessage     = ref("");
 
 // 権限のあるユーザーのみ割当変更が可能（MainMenuViewの「グループページ」表示条件と同じ閾値）
 const canAssign = computed(() => authStore.userRole >= 1010);
+// CSVインポート/エクスポートは区域係/Gr監督以上(role>=1100)のみ（#8）
+const canCsv = computed(() => authStore.userRole >= 1100);
 
 const filteredCards = computed(() => {
   return cards.value.filter(c => {
