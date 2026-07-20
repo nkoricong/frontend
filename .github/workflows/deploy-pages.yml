@@ -33,6 +33,7 @@ jobs:
           VITE_FIREBASE_APIKEY:      ${{ vars.VITE_FIREBASE_APIKEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
           VITE_FIREBASE_PROJECT_ID:  ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          VITE_GOOGLE_CLIENT_ID:     ${{ vars.VITE_GOOGLE_CLIENT_ID }}
         run: npm run build
 
       - uses: actions/upload-pages-artifact@v3
