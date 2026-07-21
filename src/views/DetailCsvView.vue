@@ -40,7 +40,7 @@
         :has-legacy-format="true"
         :import-modes="IMPORT_MODES"
         :before-import="handleBeforeImport"
-        :batch-size="10"
+        :batch-size="100"
         format-template-filename="住戸リストCSVフォーマット.csv"
         export-filename="住戸リスト.csv"
         :export-rows="exportCsvRows"
