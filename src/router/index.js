@@ -145,6 +145,11 @@ const routes = [
     name:      "visitRecordCsv",
     component: () => import("@/views/VisitRecordCsvView.vue"),
   },
+  {
+    path:      "/admin/detail-csv",
+    name:      "detailCsv",
+    component: () => import("@/views/DetailCsvView.vue"),
+  },
 ];
 
 const router = createRouter({
