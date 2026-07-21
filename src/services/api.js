@@ -565,3 +565,13 @@ export async function checkFirebaseAccountsExist(emails) {
 export async function linkFirebaseAccount(id, initialPassword) {
   return callWorker({ funcName: "linkFirebaseAccount", id, initialPassword });
 }
+
+export async function getDetailListPage(filters, afterRowId, limit) {
+  return callWorker({ funcName: "getDetailListPage", filters, afterRowId, limit });
+}
+export async function importDetailBatch(rows, format, mode) {
+  return callWorker({ funcName: "importDetailBatch", rows, format, mode });
+}
+export async function clearDetailAll() {
+  return callWorker({ funcName: "clearDetailAll" });
+}
