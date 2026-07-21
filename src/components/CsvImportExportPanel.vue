@@ -164,11 +164,17 @@ const cancelRequested = ref(false);
 
 const CANCELLED = Symbol("cancelled");
 
-// Cloudflare Workers（Freeプラン）のCPU時間/レート制限に一時的に抵触した
-// バッチ呼び出しを、間隔を空けてリトライする。回数の上限は設けず、
-// ユーザーがキャンセルするまで無限にリトライし続ける（待機中もキャンセル可能）。
-const BASE_DELAY_MS = 2000;
-const MAX_DELAY_MS  = 30000;
+// Cloudflare Workers（Freeプラン）のCPU時間・サブリクエスト数・リクエスト
+// サイズ等の制限は、いずれも即時解除（クールダウン無し）で次のリクエストは
+// 通常通り実行できる。エラー発生時は下記3段階でバッチサイズを縮小しながら
+// リトライし、成功後は縮小サイズのまま100件分投入できたら通常サイズへ復帰する。
+// 回数の上限は設けず、ユーザーがキャンセルするまで無限にリトライし続ける
+// （待機中もキャンセル可能）。
+function retryTier(retryCount) {
+  if (retryCount <= 10)  return { batchSize: props.batchSize,                          delayMs: 3000  };
+  if (retryCount <= 20)  return { batchSize: Math.max(1, Math.round(props.batchSize / 2)), delayMs: 6000  };
+  return                        { batchSize: Math.max(1, Math.round(props.batchSize / 4)), delayMs: 12000 };
+}
 
 function requestCancel() {
   cancelRequested.value = true;
@@ -184,20 +190,47 @@ function sleepCancellable(ms) {
   });
 }
 
-async function importBatchWithRetry(batch, opts) {
-  let attempt = 0;
-  for (;;) {
+/**
+ * parseRows全体を、エラー時は段階的にバッチサイズを縮小しながら最後まで
+ * 取り込む。呼び出しごとの結果をaggregateに積算し、importedCount/
+ * retryMessageを更新する。
+ */
+async function importAllWithAdaptiveRetry(opts, aggregate) {
+  let i = 0;
+  let retryCount = 0;
+  let recoveredCount = 0;
+
+  while (i < parseRows.value.length) {
     if (cancelRequested.value) throw CANCELLED;
+
+    const tier  = retryTier(retryCount);
+    const batch = parseRows.value.slice(i, i + tier.batchSize);
+
     try {
       const res = await props.importBatch(batch, opts);
       retryMessage.value = "";
-      return res;
+      aggregate.updated  += res.updated  ?? 0;
+      aggregate.inserted += res.inserted ?? 0;
+      if (res.errors)   aggregate.errors.push(...res.errors);
+      if (res.warnings) aggregate.warnings.push(...res.warnings);
+
+      i += batch.length;
+      importedCount.value = Math.min(i, parseRows.value.length);
+
+      if (retryCount > 0) {
+        recoveredCount += batch.length;
+        if (recoveredCount >= 100) {
+          retryCount     = 0;
+          recoveredCount = 0;
+        }
+      }
     } catch (e) {
-      attempt++;
       if (cancelRequested.value) throw CANCELLED;
-        const delaySec = Math.round(Math.min(BASE_DELAY_MS * 2 ** (attempt - 1), MAX_DELAY_MS) / 1000);
-        retryMessage.value = `一時的なエラーのため${delaySec}秒後に再試行します（${attempt}回目、キャンセルするまで続けます）：${e.message}`;
-      await sleepCancellable(delaySec * 1000);
+      retryCount++;
+      recoveredCount = 0;
+      const nextTier = retryTier(retryCount);
+      retryMessage.value = `一時的なエラーのため${nextTier.delayMs / 1000}秒後に再試行します（${retryCount}回目、バッチサイズ${nextTier.batchSize}件、キャンセルするまで続けます）：${e.message}`;
+      await sleepCancellable(nextTier.delayMs);
       if (cancelRequested.value) throw CANCELLED;
     }
   }
@@ -286,16 +319,7 @@ async function runImport() {
   try {
     if (props.beforeImport) await props.beforeImport({ format: format.value, mode: importMode.value });
 
-    for (let i = 0; i < parseRows.value.length; i += props.batchSize) {
-      if (cancelRequested.value) throw CANCELLED;
-      const batch = parseRows.value.slice(i, i + props.batchSize);
-      const res = await importBatchWithRetry(batch, { format: format.value, mode: importMode.value });
-      aggregate.updated  += res.updated  ?? 0;
-      aggregate.inserted += res.inserted ?? 0;
-      if (res.errors)   aggregate.errors.push(...res.errors);
-      if (res.warnings) aggregate.warnings.push(...res.warnings);
-      importedCount.value = Math.min(i + props.batchSize, parseRows.value.length);
-    }
+    await importAllWithAdaptiveRetry({ format: format.value, mode: importMode.value }, aggregate);
 
     let deletedCount = 0;
     if (props.hasDeleteSyncOption && deleteMissing.value && props.deleteMissingRows && props.extractExistingKeys && props.extractCsvKey) {
