@@ -41,6 +41,16 @@
             </div>
           </div>
 
+          <div v-if="importModes.length > 0" class="mb-3">
+            <label class="form-label small mb-1">インポートモード</label>
+            <div class="d-flex gap-3">
+              <div class="form-check" v-for="m in importModes" :key="m.value">
+                <input class="form-check-input" type="radio" :id="'mode-' + m.value" :value="m.value" v-model="importMode">
+                <label class="form-check-label" :for="'mode-' + m.value">{{ m.label }}</label>
+              </div>
+            </div>
+          </div>
+
           <div v-if="hasDeleteSyncOption" class="mb-3">
             <label class="form-label small mb-1">CSVに無い既存データの扱い</label>
             <div class="d-flex gap-3">
@@ -125,11 +135,17 @@ const props = defineProps({
   //   （完全同期モードで「CSVに無いキー」を計算するために使用）
   extractExistingKeys:  { type: Function, default: null },
   extractCsvKey:        { type: Function, default: null },
+  // [{value, label}]  指定するとインポートモード選択ラジオボタンを表示する
+  importModes:          { type: Array, default: () => [] },
+  // ({format, mode}) => Promise<void>  バッチループの直前に一度だけ呼ばれるフック
+  //   （総入替モードの事前削除等、バッチ処理の外側で1回だけ行いたい処理用）
+  beforeImport:         { type: Function, default: null },
 });
 
 const emit = defineEmits(["imported"]);
 
 const format         = ref("current");
+const importMode     = ref("");
 const deleteMissing  = ref(false);
 const parseRows      = ref([]);
 const parseMessage   = ref("");
@@ -169,6 +185,7 @@ function openImportModal() {
   parseMessage.value   = "";
   resultMessage.value  = "";
   deleteMissing.value  = false;
+  importMode.value     = props.importModes[0]?.value ?? "";
 }
 
 function closeImportModal() {
@@ -205,15 +222,22 @@ async function runImport() {
     if (!confirm(`${parseRows.value.length}件のデータを取り込みます。よろしいですか？`)) return;
   }
 
+  if (importMode.value === "replace") {
+    const typed = prompt("既存の全データを削除してCSVの内容に総入替します。よろしければ「削除して入替」と入力してください。");
+    if (typed !== "削除して入替") return;
+  }
+
   importing.value     = true;
   importedCount.value = 0;
   resultMessage.value = "";
   const aggregate = { updated: 0, inserted: 0, errors: [], warnings: [] };
 
   try {
+    if (props.beforeImport) await props.beforeImport({ format: format.value, mode: importMode.value });
+
     for (let i = 0; i < parseRows.value.length; i += props.batchSize) {
       const batch = parseRows.value.slice(i, i + props.batchSize);
-      const res = await props.importBatch(batch, { format: format.value });
+      const res = await props.importBatch(batch, { format: format.value, mode: importMode.value });
       aggregate.updated  += res.updated  ?? 0;
       aggregate.inserted += res.inserted ?? 0;
       if (res.errors)   aggregate.errors.push(...res.errors);
