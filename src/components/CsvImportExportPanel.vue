@@ -88,12 +88,16 @@
             <div class="progress" style="height:20px;">
               <div class="progress-bar" :style="{ width: importProgressPercent + '%' }">{{ importedCount }} / {{ parseRows.length }}</div>
             </div>
+            <p v-if="retryMessage" class="small text-warning mt-1 mb-0">{{ retryMessage }}</p>
           </div>
 
           <p v-if="resultMessage" class="small" :class="resultOk ? 'text-success' : 'text-danger'" style="white-space:pre-wrap;">{{ resultMessage }}</p>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" @click="closeImportModal">閉じる</button>
+          <button v-if="importing" class="btn btn-outline-danger" @click="requestCancel" :disabled="cancelRequested">
+            {{ cancelRequested ? "キャンセル中..." : "キャンセル" }}
+          </button>
+          <button v-else class="btn btn-secondary" @click="closeImportModal">閉じる</button>
           <button
             class="btn btn-primary"
             :disabled="parseRows.length === 0 || importing"
@@ -155,6 +159,50 @@ const importedCount  = ref(0);
 const resultMessage  = ref("");
 const resultOk       = ref(false);
 const exporting      = ref(false);
+const retryMessage   = ref("");
+const cancelRequested = ref(false);
+
+const CANCELLED = Symbol("cancelled");
+
+// Cloudflare Workers（Freeプラン）のCPU時間/レート制限に一時的に抵触した
+// バッチ呼び出しを、間隔を空けてリトライする。待機中もキャンセル可能。
+const MAX_RETRIES  = 8;
+const BASE_DELAY_MS = 2000;
+const MAX_DELAY_MS  = 30000;
+
+function requestCancel() {
+  cancelRequested.value = true;
+}
+
+function sleepCancellable(ms) {
+  return new Promise(resolve => {
+    const deadline = Date.now() + ms;
+    (function tick() {
+      if (cancelRequested.value || Date.now() >= deadline) resolve();
+      else setTimeout(tick, 200);
+    })();
+  });
+}
+
+async function importBatchWithRetry(batch, opts) {
+  let attempt = 0;
+  for (;;) {
+    if (cancelRequested.value) throw CANCELLED;
+    try {
+      const res = await props.importBatch(batch, opts);
+      retryMessage.value = "";
+      return res;
+    } catch (e) {
+      attempt++;
+      if (cancelRequested.value) throw CANCELLED;
+      if (attempt > MAX_RETRIES) throw e;
+      const delaySec = Math.round(Math.min(BASE_DELAY_MS * 2 ** (attempt - 1), MAX_DELAY_MS) / 1000);
+      retryMessage.value = `一時的なエラーのため${delaySec}秒後に再試行します（${attempt}/${MAX_RETRIES}回目）：${e.message}`;
+      await sleepCancellable(delaySec * 1000);
+      if (cancelRequested.value) throw CANCELLED;
+    }
+  }
+}
 
 const previewColumns = computed(() => (format.value === "legacy" && props.hasLegacyFormat ? props.legacyColumns : props.columns));
 const previewRows    = computed(() => parseRows.value.slice(0, 10));
@@ -186,6 +234,8 @@ function openImportModal() {
   resultMessage.value  = "";
   deleteMissing.value  = false;
   importMode.value     = props.importModes[0]?.value ?? "";
+  cancelRequested.value = false;
+  retryMessage.value    = "";
 }
 
 function closeImportModal() {
@@ -227,17 +277,20 @@ async function runImport() {
     if (typed !== "削除して入替") return;
   }
 
-  importing.value     = true;
-  importedCount.value = 0;
-  resultMessage.value = "";
+  importing.value      = true;
+  importedCount.value  = 0;
+  resultMessage.value  = "";
+  cancelRequested.value = false;
+  retryMessage.value    = "";
   const aggregate = { updated: 0, inserted: 0, errors: [], warnings: [] };
 
   try {
     if (props.beforeImport) await props.beforeImport({ format: format.value, mode: importMode.value });
 
     for (let i = 0; i < parseRows.value.length; i += props.batchSize) {
+      if (cancelRequested.value) throw CANCELLED;
       const batch = parseRows.value.slice(i, i + props.batchSize);
-      const res = await props.importBatch(batch, { format: format.value, mode: importMode.value });
+      const res = await importBatchWithRetry(batch, { format: format.value, mode: importMode.value });
       aggregate.updated  += res.updated  ?? 0;
       aggregate.inserted += res.inserted ?? 0;
       if (res.errors)   aggregate.errors.push(...res.errors);
@@ -267,11 +320,18 @@ async function runImport() {
     parseRows.value = [];
     emit("imported");
   } catch (e) {
-    console.error(e);
-    resultOk.value = false;
-    resultMessage.value = `インポートに失敗しました（${importedCount.value}件まで完了）：${e.message}`;
+    if (e === CANCELLED) {
+      resultOk.value = false;
+      resultMessage.value = `ユーザーの操作によりキャンセルしました（${importedCount.value}件まで完了）。`;
+    } else {
+      console.error(e);
+      resultOk.value = false;
+      resultMessage.value = `インポートに失敗しました（${importedCount.value}件まで完了）：${e.message}`;
+    }
   } finally {
-    importing.value = false;
+    importing.value      = false;
+    cancelRequested.value = false;
+    retryMessage.value    = "";
   }
 }
 
