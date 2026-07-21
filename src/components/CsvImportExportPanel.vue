@@ -165,8 +165,8 @@ const cancelRequested = ref(false);
 const CANCELLED = Symbol("cancelled");
 
 // Cloudflare Workers（Freeプラン）のCPU時間/レート制限に一時的に抵触した
-// バッチ呼び出しを、間隔を空けてリトライする。待機中もキャンセル可能。
-const MAX_RETRIES  = 8;
+// バッチ呼び出しを、間隔を空けてリトライする。回数の上限は設けず、
+// ユーザーがキャンセルするまで無限にリトライし続ける（待機中もキャンセル可能）。
 const BASE_DELAY_MS = 2000;
 const MAX_DELAY_MS  = 30000;
 
@@ -195,9 +195,8 @@ async function importBatchWithRetry(batch, opts) {
     } catch (e) {
       attempt++;
       if (cancelRequested.value) throw CANCELLED;
-      if (attempt > MAX_RETRIES) throw e;
-      const delaySec = Math.round(Math.min(BASE_DELAY_MS * 2 ** (attempt - 1), MAX_DELAY_MS) / 1000);
-      retryMessage.value = `一時的なエラーのため${delaySec}秒後に再試行します（${attempt}/${MAX_RETRIES}回目）：${e.message}`;
+        const delaySec = Math.round(Math.min(BASE_DELAY_MS * 2 ** (attempt - 1), MAX_DELAY_MS) / 1000);
+        retryMessage.value = `一時的なエラーのため${delaySec}秒後に再試行します（${attempt}回目、キャンセルするまで続けます）：${e.message}`;
       await sleepCancellable(delaySec * 1000);
       if (cancelRequested.value) throw CANCELLED;
     }
