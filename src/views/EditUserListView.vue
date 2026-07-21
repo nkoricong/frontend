@@ -124,7 +124,8 @@
               </td>
               <td class="text-nowrap">
                 <button class="btn btn-sm alert-primary me-1" @click="openEditModal(u)">編集</button>
-                <button class="btn btn-sm btn-warning" @click="handleDelete(u)">削除</button>
+                <button class="btn btn-sm btn-warning me-1" @click="handleDelete(u)">削除</button>
+                <button v-if="hasNoFirebaseAccount(u)" class="btn btn-sm btn-outline-danger" @click="openLinkModal(u)">Firebase連携</button>
               </td>
             </tr>
             <tr v-if="filteredUsers.length === 0">
@@ -304,6 +305,49 @@
   </div>
   <div v-if="showModal" class="modal-backdrop fade show"></div>
 
+  <!-- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ -->
+  <!-- +++ Firebase連携モーダル（#12） ++++++++++++++++++++++++++++++++++++ -->
+  <!-- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ -->
+  <div
+    class="modal fade"
+    :class="{ show: showLinkModal }"
+    :style="showLinkModal ? 'display:block' : 'display:none'"
+    tabindex="-1"
+    role="dialog"
+    @click.self="closeLinkModal"
+  >
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Firebase連携</h5>
+          <button type="button" class="btn-close" @click="closeLinkModal"></button>
+        </div>
+        <div class="modal-body">
+          <p>
+            「{{ linkTargetUser?.UserName }}」のUserID・メール1〜3のうち、Firebase
+            Authenticationにまだ存在しないアカウントを、以下の初期パスワードで作成します。
+          </p>
+          <label class="form-label small">初期パスワード</label>
+          <input
+            type="text"
+            class="form-control"
+            v-model="linkPassword"
+            placeholder="6文字以上"
+          />
+          <p v-if="linkMessage" class="small mt-2" :class="linkError ? 'text-danger' : 'text-success'">{{ linkMessage }}</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="closeLinkModal">閉じる</button>
+          <button class="btn btn-primary" @click="handleLinkFirebase" :disabled="linking">
+            <span v-if="linking"><i class="fas fa-spinner fa-spin"></i> 処理中...</span>
+            <span v-else>連携実行</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div v-if="showLinkModal" class="modal-backdrop fade show"></div>
+
 </template>
 
 <script setup>
@@ -313,6 +357,7 @@ import { useAuthStore } from "@/store/authStore.js";
 import {
   getUserMasterList, upsertUser, deleteUser, resetFirebaseUserPassword,
   importUserMasterBatch, deleteUserMasterBatch,
+  checkFirebaseAccountsExist, linkFirebaseAccount,
 } from "@/services/api.js";
 import CsvImportExportPanel from "@/components/CsvImportExportPanel.vue";
 
@@ -377,6 +422,34 @@ async function fetchUsers() {
   } finally {
     loading.value = false;
   }
+  refreshFirebaseAccountStatus();
+}
+
+// ---- Firebase未連携ユーザーの洗い出し（#12） ----
+const existingFirebaseEmails = ref(new Set());
+
+function userEmails(u) {
+  return [u.UserID, u.Mail1, u.Mail2, u.Mail3].filter(Boolean);
+}
+
+async function refreshFirebaseAccountStatus() {
+  const emails = [...new Set(users.value.flatMap(userEmails))];
+  if (emails.length === 0) {
+    existingFirebaseEmails.value = new Set();
+    return;
+  }
+  try {
+    const res = await checkFirebaseAccountsExist(emails);
+    existingFirebaseEmails.value = new Set(res.existing || []);
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function hasNoFirebaseAccount(u) {
+  const emails = userEmails(u);
+  if (emails.length === 0) return false;
+  return !emails.some(e => existingFirebaseEmails.value.has(e));
 }
 
 // ---- 編集／新規作成モーダル ----
@@ -550,6 +623,57 @@ async function handleDelete(user) {
     alert(e.message);
   } finally {
     loading.value = false;
+  }
+}
+
+// ---- Firebase連携モーダル（#12） ----
+const showLinkModal  = ref(false);
+const linkTargetUser = ref(null);
+const linkPassword   = ref("");
+const linking        = ref(false);
+const linkMessage    = ref("");
+const linkError      = ref(false);
+
+function openLinkModal(user) {
+  linkTargetUser.value = user;
+  linkPassword.value   = "";
+  linkMessage.value    = "";
+  linkError.value      = false;
+  showLinkModal.value  = true;
+}
+
+function closeLinkModal() {
+  if (linking.value) return;
+  showLinkModal.value = false;
+}
+
+async function handleLinkFirebase() {
+  linkMessage.value = "";
+  linkError.value    = false;
+
+  if (!linkPassword.value || linkPassword.value.length < 6) {
+    linkMessage.value = "パスワードは6文字以上で入力してください";
+    linkError.value    = true;
+    return;
+  }
+
+  linking.value = true;
+  try {
+    const res = await linkFirebaseAccount(linkTargetUser.value.ID, linkPassword.value);
+    if (res.status === "success") {
+      const summary = describeFirebaseSync({ synced: res.synced });
+      linkMessage.value = summary || "Firebaseアカウントを連携しました";
+      linkError.value    = false;
+      await refreshFirebaseAccountStatus();
+    } else {
+      linkMessage.value = res.message || "連携に失敗しました";
+      linkError.value    = true;
+    }
+  } catch (e) {
+    linkMessage.value = e.message;
+    linkError.value    = true;
+  } finally {
+    linking.value = false;
   }
 }
 
