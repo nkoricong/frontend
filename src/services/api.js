@@ -558,3 +558,10 @@ export async function importUserMasterBatch(rows) {
 export async function deleteUserMasterBatch(ids) {
   return callWorker({ funcName: "deleteUserMasterBatch", ids });
 }
+
+export async function checkFirebaseAccountsExist(emails) {
+  return callWorker({ funcName: "checkFirebaseAccountsExist", emails });
+}
+export async function linkFirebaseAccount(id, initialPassword) {
+  return callWorker({ funcName: "linkFirebaseAccount", id, initialPassword });
+}
