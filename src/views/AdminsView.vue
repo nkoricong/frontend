@@ -41,6 +41,9 @@
         <button class="btn alert-secondary col-12 text-left mb-3" @click="router.push({ name: 'visitRecordCsv' })">
           <h5 class="mb-0"><i class="fas fa-file-csv"></i> 訪問履歴のCSV入出力</h5>
         </button>
+        <button class="btn alert-secondary col-12 text-left mb-3" @click="router.push({ name: 'detailCsv' })">
+          <h5 class="mb-0"><i class="fas fa-file-csv"></i> 住戸リストのCSV入出力</h5>
+        </button>        
       </div>
       <div class="col-sm-2"></div>
     </div>
