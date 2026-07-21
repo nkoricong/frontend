@@ -171,9 +171,10 @@ const CANCELLED = Symbol("cancelled");
 // 回数の上限は設けず、ユーザーがキャンセルするまで無限にリトライし続ける
 // （待機中もキャンセル可能）。
 function retryTier(retryCount) {
-  if (retryCount <= 10)  return { batchSize: props.batchSize,                          delayMs: 3000  };
-  if (retryCount <= 20)  return { batchSize: Math.max(1, Math.round(props.batchSize / 2)), delayMs: 6000  };
-  return                        { batchSize: Math.max(1, Math.round(props.batchSize / 4)), delayMs: 12000 };
+  if (retryCount <= 5)  return { batchSize: props.batchSize,                           delayMs: 3000  };
+  if (retryCount <= 10) return { batchSize: Math.max(1, Math.round(props.batchSize / 2)),  delayMs: 6000  };
+  if (retryCount <= 15) return { batchSize: Math.max(1, Math.round(props.batchSize / 4)),  delayMs: 12000 };
+  return                       { batchSize: Math.max(1, Math.round(props.batchSize / 10)), delayMs: 15000 };
 }
 
 function requestCancel() {
@@ -219,7 +220,7 @@ async function importAllWithAdaptiveRetry(opts, aggregate) {
 
       if (retryCount > 0) {
         recoveredCount += batch.length;
-        if (recoveredCount >= 100) {
+        if (recoveredCount >= 3000) {
           retryCount     = 0;
           recoveredCount = 0;
         }
