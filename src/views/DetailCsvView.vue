@@ -79,6 +79,20 @@
       </div>
     </div>
 
+    <!-- 表示件数・ページ操作 -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-2 gap-2">
+      <div class="d-flex align-items-center gap-2">
+        <label class="form-label small mb-0">表示件数</label>
+        <select class="form-select form-select-sm w-auto" v-model.number="pageSize">
+          <option v-for="s in PAGE_SIZE_OPTIONS" :key="s" :value="s">{{ s }}件</option>
+        </select>
+      </div>
+      <div class="small text-muted">
+        <span v-if="total > 0">全{{ total }}件のうち{{ rangeStart }}件目から{{ rangeEnd }}件目を表示</span>
+        <span v-else-if="!loadingList">該当する住戸がありません</span>
+      </div>
+    </div>
+
     <!-- 一覧 -->
     <div class="table-responsive">
       <table class="table table-sm table-striped align-middle">
@@ -112,22 +126,28 @@
       </table>
     </div>
 
-    <div class="text-center my-3">
+    <div class="d-flex justify-content-center align-items-center gap-3 my-3">
       <div v-if="loadingList"><i class="fas fa-spinner fa-spin"></i> 読み込み中...</div>
-      <button v-else-if="hasMore" class="btn btn-outline-secondary" @click="loadMore">
-        さらに読み込む
-      </button>
+      <template v-else-if="totalPages > 0">
+        <button class="btn btn-outline-secondary btn-sm" :disabled="currentPage <= 1" @click="goToPage(currentPage - 1)">
+          <i class="fas fa-chevron-left"></i> 前へ
+        </button>
+        <span class="small">{{ totalPages }}ページ中{{ currentPage }}ページ目</span>
+        <button class="btn btn-outline-secondary btn-sm" :disabled="currentPage >= totalPages" @click="goToPage(currentPage + 1)">
+          次へ <i class="fas fa-chevron-right"></i>
+        </button>
+      </template>
     </div>
 
   </main>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, watch, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/store/authStore.js";
 import {
-  getCardList, getDetailListPage, importDetailBatch,
+  getCardList, getDetailListPage, getDetailListPageOffset, importDetailBatch,
 } from "@/services/api.js";
 import CsvImportExportPanel from "@/components/CsvImportExportPanel.vue";
 
@@ -158,28 +178,38 @@ const filters = computed(() => {
   return { cardNos, childNo: childNoInput.value.trim() || undefined };
 });
 
-// ---- 一覧（キーセットページング） ----
+// ---- 一覧（ページ番号方式のページネーション） ----
+const PAGE_SIZE_OPTIONS = [50, 100, 500, 1000];
+
 const rows        = ref([]);
-const afterRowId   = ref(0);
-const hasMore      = ref(false);
+const total        = ref(0);
+const currentPage  = ref(1);
+const pageSize     = ref(100);
 const loadingList  = ref(false);
-const LIST_PAGE_SIZE = 200;
+
+const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)));
+const rangeStart  = computed(() => total.value === 0 ? 0 : (currentPage.value - 1) * pageSize.value + 1);
+const rangeEnd    = computed(() => Math.min(total.value, currentPage.value * pageSize.value));
 
 async function resetList() {
-  rows.value      = [];
-  afterRowId.value = 0;
-  hasMore.value    = false;
-  await loadMore();
+  currentPage.value = 1;
+  await loadPage();
 }
 
-async function loadMore() {
+async function goToPage(page) {
+  if (page < 1 || page > totalPages.value || page === currentPage.value) return;
+  currentPage.value = page;
+  await loadPage();
+}
+
+async function loadPage() {
   loadingList.value = true;
   try {
-    const res = await getDetailListPage(filters.value, afterRowId.value, LIST_PAGE_SIZE);
+    const offset = (currentPage.value - 1) * pageSize.value;
+    const res = await getDetailListPageOffset(filters.value, offset, pageSize.value);
     if (res.status === "success") {
-      rows.value.push(...(res.rows || []));
-      afterRowId.value = res.lastRowId;
-      hasMore.value    = res.hasMore;
+      rows.value  = res.rows || [];
+      total.value = res.total ?? 0;
     }
   } catch (e) {
     console.error(e);
@@ -187,6 +217,9 @@ async function loadMore() {
     loadingList.value = false;
   }
 }
+
+// 表示件数を変更したら1ページ目に戻る
+watch(pageSize, () => resetList());
 
 // ---- CSVインポート／エクスポート ----
 // current/legacy共通でdetailテーブルのカラム名（lowercase）を使う。差分は

@@ -569,6 +569,9 @@ export async function linkFirebaseAccount(id, initialPassword) {
 export async function getDetailListPage(filters, afterRowId, limit) {
   return callWorker({ funcName: "getDetailListPage", filters, afterRowId, limit });
 }
+export async function getDetailListPageOffset(filters, offset, limit) {
+  return callWorker({ funcName: "getDetailListPageOffset", filters, offset, limit });
+}
 export async function importDetailBatch(rows, format, mode) {
   return callWorker({ funcName: "importDetailBatch", rows, format, mode });
 }
