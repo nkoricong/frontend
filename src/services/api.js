@@ -575,3 +575,14 @@ export async function importDetailBatch(rows, format, mode) {
 export async function clearDetailAll() {
   return callWorker({ funcName: "clearDetailAll" });
 }
+
+// ---- CSVインポートジョブ（GitHub Actionsでバックグラウンド実行, #18） ----
+export async function startCsvImportJob(target, csvText, format, mode) {
+  return callWorker({ funcName: "startCsvImportJob", target, csvText, format, mode });
+}
+export async function getCsvImportJobStatus(jobId) {
+  return callWorker({ funcName: "getCsvImportJobStatus", jobId });
+}
+export async function cancelCsvImportJob(jobId) {
+  return callWorker({ funcName: "cancelCsvImportJob", jobId });
+}

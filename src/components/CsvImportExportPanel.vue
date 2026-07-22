@@ -65,12 +65,12 @@
             </div>
           </div>
 
-          <div class="mb-3">
+          <div v-if="!currentJobId" class="mb-3">
             <input type="file" class="form-control" accept=".csv" @change="onFileChange">
           </div>
-          <p v-if="parseMessage" class="small" :class="parseRows.length > 0 ? 'text-muted' : 'text-danger'">{{ parseMessage }}</p>
+          <p v-if="!currentJobId && parseMessage" class="small" :class="parseRows.length > 0 ? 'text-muted' : 'text-danger'">{{ parseMessage }}</p>
 
-          <div v-if="previewRows.length > 0" class="table-responsive mb-3" style="max-height:300px;">
+          <div v-if="!currentJobId && previewRows.length > 0" class="table-responsive mb-3" style="max-height:300px;">
             <table class="table table-sm table-bordered">
               <thead>
                 <tr><th v-for="c in previewColumns" :key="c">{{ c }}</th></tr>
@@ -84,11 +84,16 @@
             <p class="small text-muted">先頭{{ previewRows.length }}件のプレビュー（全{{ parseRows.length }}件）</p>
           </div>
 
+          <div v-if="currentJobId" class="alert alert-info small">
+            バックグラウンドで実行中です（GitHub Actions）。このモーダルを閉じたり画面を離れても処理は継続され、再度開けば進捗が表示されます。
+          </div>
+
           <div v-if="importing" class="mb-3">
             <div class="progress" style="height:20px;">
               <div class="progress-bar" :style="{ width: importProgressPercent + '%' }">{{ importedCount }} / {{ parseRows.length }}</div>
             </div>
             <p v-if="retryMessage" class="small text-warning mt-1 mb-0">{{ retryMessage }}</p>
+            <p v-if="currentJobId && jobStatus" class="small text-muted mt-1 mb-0">状態: {{ jobStatus }}</p>
           </div>
 
           <p v-if="resultMessage" class="small" :class="resultOk ? 'text-success' : 'text-danger'" style="white-space:pre-wrap;">{{ resultMessage }}</p>
@@ -114,8 +119,9 @@
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { buildCsv, downloadCsv, parseCsvWithHeader } from "@/utils/csv.js";
+import { startCsvImportJob, getCsvImportJobStatus, cancelCsvImportJob } from "@/services/api.js";
 
 const props = defineProps({
   title:               { type: String, required: true },
@@ -144,6 +150,9 @@ const props = defineProps({
   // ({format, mode}) => Promise<void>  バッチループの直前に一度だけ呼ばれるフック
   //   （総入替モードの事前削除等、バッチ処理の外側で1回だけ行いたい処理用）
   beforeImport:         { type: Function, default: null },
+  // 指定すると、Worker上での同期バッチ処理の代わりにGitHub Actionsへジョブを
+  // 投入する非同期方式になる（#18）。値はWorker側のtarget識別子（例:"detail"）。
+  importTarget:         { type: String, default: null },
 });
 
 const emit = defineEmits(["imported"]);
@@ -161,13 +170,102 @@ const resultOk       = ref(false);
 const exporting      = ref(false);
 const retryMessage   = ref("");
 const cancelRequested = ref(false);
+const rawCsvText     = ref("");
 
 const CANCELLED = Symbol("cancelled");
 
+// ------------------------------------------------------------------
+// ジョブ方式（GitHub Actionsでバックグラウンド実行, #18）
+// importTargetが指定されている画面はこちらを使う。ジョブIDをlocalStorageに
+// 保持し、モーダルを閉じたり画面を離れても、再度開けば進捗表示を再開できる。
+// ------------------------------------------------------------------
+const currentJobId = ref(null);
+const jobStatus    = ref(null); // "queued"|"running"|"completed"|"failed"|"cancelled"
+let pollTimer = null;
+
+const jobStorageKey = computed(() => `csvImportJob:${props.importTarget}`);
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+function startPolling() {
+  stopPolling();
+  pollTimer = setInterval(pollJobStatus, 2500);
+}
+
+async function pollJobStatus() {
+  if (!currentJobId.value) return;
+  let res;
+  try {
+    res = await getCsvImportJobStatus(currentJobId.value);
+  } catch (e) {
+    return; // 一時的な通信エラーは無視して次回ポーリングに任せる
+  }
+  if (res.status !== "success") return;
+
+  const job = res.job;
+  jobStatus.value     = job.status;
+  importedCount.value = job.processed ?? 0;
+  if (job.total != null) parseRows.value = new Array(job.total).fill(null);
+
+  if (job.status === "completed" || job.status === "failed" || job.status === "cancelled") {
+    stopPolling();
+    importing.value      = false;
+    cancelRequested.value = false;
+    localStorage.removeItem(jobStorageKey.value);
+
+    if (job.status === "completed") {
+      resultOk.value = job.errors.length === 0;
+      const parts = [`更新${job.updated}件・新規${job.inserted}件`];
+      if (job.errors.length > 0) parts.push(`エラー${job.errors.length}件:\n` + job.errors.join("\n"));
+      resultMessage.value = `インポートが完了しました。（${parts.join(" / ")}）`;
+      parseRows.value = [];
+      emit("imported");
+    } else if (job.status === "cancelled") {
+      resultOk.value = false;
+      resultMessage.value = `ユーザーの操作によりキャンセルしました（${job.processed}件まで完了）。`;
+    } else {
+      resultOk.value = false;
+      resultMessage.value = `インポートに失敗しました（${job.processed}件まで完了）：${(job.errors || []).join(" / ")}`;
+    }
+  }
+}
+
+async function runJobImport() {
+  const jobRes = await startCsvImportJob(props.importTarget, rawCsvText.value, format.value, importMode.value);
+  if (jobRes.status !== "success") {
+    throw new Error(jobRes.message || "ジョブの開始に失敗しました");
+  }
+  currentJobId.value = jobRes.jobId;
+  jobStatus.value     = "queued";
+  localStorage.setItem(jobStorageKey.value, jobRes.jobId);
+  startPolling();
+}
+
+// 画面を離れて戻ってきた場合（コンポーネント再マウント）に、実行中のジョブが
+// あればポーリングを自動再開する。
+onMounted(() => {
+  if (!props.importTarget) return;
+  const savedJobId = localStorage.getItem(jobStorageKey.value);
+  if (savedJobId) {
+    currentJobId.value = savedJobId;
+    importing.value    = true;
+    startPolling();
+  }
+});
+
+onBeforeUnmount(() => {
+  stopPolling();
+});
+
 // Cloudflare Workers（Freeプラン）のCPU時間・サブリクエスト数・リクエスト
 // サイズ等の制限は、いずれも即時解除（クールダウン無し）で次のリクエストは
-// 通常通り実行できる。エラー発生時は下記3段階でバッチサイズを縮小しながら
-// リトライし、成功後は縮小サイズのまま100件分投入できたら通常サイズへ復帰する。
+// 通常通り実行できる。エラー発生時は下記4段階でバッチサイズを縮小しながら
+// リトライし、成功後は縮小サイズのまま3000件投入できたら通常サイズへ復帰する。
 // 回数の上限は設けず、ユーザーがキャンセルするまで無限にリトライし続ける
 // （待機中もキャンセル可能）。
 function retryTier(retryCount) {
@@ -179,6 +277,9 @@ function retryTier(retryCount) {
 
 function requestCancel() {
   cancelRequested.value = true;
+  if (currentJobId.value) {
+    cancelCsvImportJob(currentJobId.value).catch(() => {});
+  }
 }
 
 function sleepCancellable(ms) {
@@ -284,6 +385,7 @@ async function onFileChange(event) {
   resultMessage.value = "";
   try {
     const text = await file.text();
+    rawCsvText.value = text;
     const rows = parseCsvWithHeader(text);
     parseRows.value = rows;
     parseMessage.value = rows.length > 0
@@ -315,6 +417,21 @@ async function runImport() {
   resultMessage.value  = "";
   cancelRequested.value = false;
   retryMessage.value    = "";
+
+  if (props.importTarget) {
+    try {
+      if (props.beforeImport) await props.beforeImport({ format: format.value, mode: importMode.value });
+      await runJobImport();
+      // 完了/失敗/キャンセルの表示はpollJobStatus側が行う（importing.valueもそちらで解除する）
+    } catch (e) {
+      console.error(e);
+      resultOk.value      = false;
+      resultMessage.value = `インポートの開始に失敗しました：${e.message}`;
+      importing.value     = false;
+    }
+    return;
+  }
+
   const aggregate = { updated: 0, inserted: 0, errors: [], warnings: [] };
 
   try {

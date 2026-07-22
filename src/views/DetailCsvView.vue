@@ -39,8 +39,7 @@
         :legacy-columns="LEGACY_CSV_COLUMNS"
         :has-legacy-format="true"
         :import-modes="IMPORT_MODES"
-        :before-import="handleBeforeImport"
-        :batch-size="100"
+        import-target="detail"
         format-template-filename="住戸リストCSVフォーマット.csv"
         export-filename="住戸リスト.csv"
         :export-rows="exportCsvRows"
@@ -128,7 +127,7 @@ import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/store/authStore.js";
 import {
-  getCardList, getDetailListPage, importDetailBatch, clearDetailAll,
+  getCardList, getDetailListPage, importDetailBatch,
 } from "@/services/api.js";
 import CsvImportExportPanel from "@/components/CsvImportExportPanel.vue";
 
@@ -238,12 +237,6 @@ async function exportCsvRows(format) {
 
 async function importCsvBatch(rowsIn, { format, mode }) {
   return importDetailBatch(rowsIn, format, mode);
-}
-
-async function handleBeforeImport({ mode }) {
-  if (mode === "replace") {
-    await clearDetailAll();
-  }
 }
 
 onMounted(async () => {
