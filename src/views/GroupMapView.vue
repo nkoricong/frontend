@@ -152,6 +152,7 @@ import {
   assignChildMinister, returnChildCard,
 } from "@/services/api.js";
 import { loadGoogleMaps, createMap } from "@/services/maps.js";
+import { fetchDefaultCenter } from "@/services/mapCenter.js";
 import GroupViewSwitcher from "@/components/GroupViewSwitcher.vue";
 import { GROUP_VIEWS, setLastGroupView } from "@/services/groupViewPreference.js";
 
@@ -221,7 +222,7 @@ async function loadPolygons() {
 async function initMap() {
   try {
     await loadGoogleMaps();
-    mapInstance = createMap(mapContainer.value, { lat: 35.6812, lng: 139.7671 }, 12);
+    mapInstance = createMap(mapContainer.value, await fetchDefaultCenter(), 12);
 
     const bounds = new google.maps.LatLngBounds();
     for (const child of cards.value) {

@@ -305,8 +305,9 @@ import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from "vue";
 import { useRouter } from "vue-router";
 import QRCode from "qrcode";
 import { useAuthStore } from "@/store/authStore.js";
-import { getChildDetail, getKmlUrl, createChildShare } from "@/services/api.js";
-import { loadGoogleMaps, createMap, addMarker, addKmlLayer, setMarkerFocused } from "@/services/maps.js";
+import { getChildDetail, getChildPolygons, createChildShare } from "@/services/api.js";
+import { loadGoogleMaps, createMap, addMarker, setMarkerFocused } from "@/services/maps.js";
+import { fetchDefaultCenter } from "@/services/mapCenter.js";
 import { isChildOffline, getOfflineChild, findOfflineEntryByCard, isOnline } from "@/services/offline.js";
 import VisitModal from "@/components/VisitModal.vue";
 import HouseInfoModal from "@/components/HouseInfoModal.vue";
@@ -378,9 +379,10 @@ async function handleOfflineReleased() {
   await initMap();
 }
 
-let mapInstance = null;
-let kmlLayer    = null;
-let infoWindow  = null;
+let mapInstance   = null;
+let parentPolygon = null; // 親カード（区域全体）のポリゴン、赤
+let childPolygon  = null; // 当該子カードのポリゴン、緑
+let infoWindow    = null;
 const markers   = [];
 const markersByHousing = new Map(); // HousingNo -> google.maps.Marker
 
@@ -634,16 +636,48 @@ async function initMap() {
   try {
     await loadGoogleMaps();
 
-    const center = {
-      lat: childInfo.value?.ChildLat ? Number(childInfo.value.ChildLat) : 35.6812,
-      lng: childInfo.value?.ChildLng ? Number(childInfo.value.ChildLng) : 139.7671,
-    };
+    const center = (childInfo.value?.ChildLat && childInfo.value?.ChildLng)
+      ? { lat: Number(childInfo.value.ChildLat), lng: Number(childInfo.value.ChildLng) }
+      : await fetchDefaultCenter();
 
     mapInstance = createMap(mapContainer.value, center, 15);
 
-    // KML オーバーレイ（区域全体のKMLを、この子カード番号で絞り込んで表示）
+    // 親カード（区域全体、赤）＋当該子カード（緑）のポリゴンを描画する（#27）。
+    // KmlLayerでは2色の描き分けができないため、座標をJSONで取得して
+    // google.maps.Polygonを個別描画する（GroupMapView.vueと同じ方式）。
     if (cardInfo.value?.KML) {
-      kmlLayer = addKmlLayer(mapInstance, getKmlUrl(cardInfo.value.KML, props.childNo));
+      try {
+        const res = await getChildPolygons(cardInfo.value.KML);
+        if (res.status === "success") {
+          const bounds = new google.maps.LatLngBounds();
+          const wholeEntry = (res.polygons || []).find(p => p.ChildNo === null);
+          const childEntry = (res.polygons || []).find(p => p.ChildNo === Number(props.childNo));
+
+          if (wholeEntry?.Path?.length > 0) {
+            parentPolygon = new google.maps.Polygon({
+              map: mapInstance,
+              paths: wholeEntry.Path,
+              fillColor: "#F44336", fillOpacity: 0.1,
+              strokeColor: "#D32F2F", strokeWeight: 2,
+              clickable: false,
+            });
+            wholeEntry.Path.forEach(p => bounds.extend(p));
+          }
+          if (childEntry?.Path?.length > 0) {
+            childPolygon = new google.maps.Polygon({
+              map: mapInstance,
+              paths: childEntry.Path,
+              fillColor: "#4CAF50", fillOpacity: 0.35,
+              strokeColor: "#388E3C", strokeWeight: 2,
+              clickable: false,
+            });
+            childEntry.Path.forEach(p => bounds.extend(p));
+          }
+          if (!bounds.isEmpty()) mapInstance.fitBounds(bounds);
+        }
+      } catch (e) {
+        console.error("KMLポリゴンの取得に失敗しました:", e);
+      }
     }
 
     // 住戸マーカー（クリックで住戸リストの該当行をハイライト・吹き出し表示）
@@ -714,7 +748,8 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener("resize", updateHeaderHeight);
-  if (kmlLayer) kmlLayer.setMap(null);
+  if (parentPolygon) parentPolygon.setMap(null);
+  if (childPolygon) childPolygon.setMap(null);
   if (infoWindow) infoWindow.close();
   markers.forEach(m => { if (m.map) m.map = null; });
   markersByHousing.clear();

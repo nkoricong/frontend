@@ -9,7 +9,13 @@ const FALLBACK_MAP_CENTER = { lat: 35.6812, lng: 139.7671 };
 let cachedDefaultCenter = null;
 let cachedDefaultCenterPromise = null;
 
-async function fetchDefaultCenter() {
+/**
+ * 管理者設定の初期表示位置を解決する（未登録・取得失敗時はハードコードの
+ * 最終フォールバックを返す）。ポリゴンが無い・読み込み中の地図画面の初期
+ * 表示位置に使う（#27）。
+ * @returns {Promise<{ lat: number, lng: number }>}
+ */
+export async function fetchDefaultCenter() {
   if (cachedDefaultCenter) return cachedDefaultCenter;
   if (!cachedDefaultCenterPromise) {
     cachedDefaultCenterPromise = getDefaultMapCenter()

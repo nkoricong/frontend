@@ -187,6 +187,7 @@ import { ref, onMounted, nextTick } from "vue";
 import { useRouter } from "vue-router";
 import { getChildListByCard, getKmlUrl, getChildUsageHistory } from "@/services/api.js";
 import { loadGoogleMaps, createMap, addKmlLayer } from "@/services/maps.js";
+import { fetchDefaultCenter } from "@/services/mapCenter.js";
 
 const props = defineProps({
   cardNo: { type: Number, required: true },
@@ -261,10 +262,9 @@ async function initMap() {
   try {
     await loadGoogleMaps();
 
-    const center = {
-      lat: cardInfo.value?.LAT ? Number(cardInfo.value.LAT) : 35.6812,
-      lng: cardInfo.value?.LNG ? Number(cardInfo.value.LNG) : 139.7671,
-    };
+    const center = (cardInfo.value?.LAT && cardInfo.value?.LNG)
+      ? { lat: Number(cardInfo.value.LAT), lng: Number(cardInfo.value.LNG) }
+      : await fetchDefaultCenter();
 
     mapInstance = createMap(mapContainer.value, center, 15);
 
