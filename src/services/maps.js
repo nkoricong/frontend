@@ -38,15 +38,20 @@ export async function loadGoogleMaps() {
  * @param {HTMLElement} container
  * @param {{ lat: number, lng: number }} center
  * @param {number} zoom
+ * @param {{ gestureHandling?: string }} options
+ *   gestureHandling省略時は"greedy"（1本指でパン・ピンチでズーム可能）。
+ *   "cooperative"を指定すると2本指操作のみ受け付ける（誤操作防止、#29）。
  * @returns {google.maps.Map}
  */
-export function createMap(container, center, zoom = 16) {
+export function createMap(container, center, zoom = 16, options = {}) {
   return new google.maps.Map(container, {
     center,
     zoom,
     mapTypeId: google.maps.MapTypeId.ROADMAP,
     // Ctrl+スクロールや2本指操作を不要にし、通常のスクロール／1本指でズーム・パンできるようにする
-    gestureHandling: "greedy",
+    gestureHandling: options.gestureHandling || "greedy",
+    // モバイルではデフォルト非表示のため明示的に有効化する（#30）
+    zoomControl: true,
   });
 }
 

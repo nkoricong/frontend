@@ -63,7 +63,11 @@
     <!-- 住戸一覧をスクロールしても地図が隠れないよう、ヘッダー直下に固定表示する -->
     <template v-if="!usingCachedData">
       <div class="map-sticky-wrapper" :style="{ top: headerHeight + 'px' }">
-        <div class="d-flex justify-content-end px-2 mb-1">
+        <div class="d-flex justify-content-end gap-2 px-2 mb-1">
+          <button class="btn btn-sm btn-outline-secondary" @click="toggleGestureMode">
+            <i class="fas fa-hand-pointer"></i>
+            {{ gestureMode === "greedy" ? "指2本で操作" : "指1本で操作" }}
+          </button>
           <button class="btn btn-sm btn-outline-secondary" @click="toggleMap">
             <i class="fas" :class="mapVisible ? 'fa-eye-slash' : 'fa-eye'"></i>
             {{ mapVisible ? "地図を隠す" : "地図を表示" }}
@@ -323,6 +327,28 @@ const props = defineProps({
 const router    = useRouter();
 const authStore = useAuthStore();
 
+// 地図のジェスチャー操作モード（1本指／2本指）をユーザーごとにブラウザストレージへ記憶する（#29）
+const GESTURE_MODE_STORAGE_KEY = "ekuiki_childmap_gesture_mode";
+function gestureModeStorageKey() {
+  const uid = authStore.userId || "anonymous";
+  return `${GESTURE_MODE_STORAGE_KEY}:${uid}`;
+}
+function loadGestureModePref() {
+  try {
+    const saved = localStorage.getItem(gestureModeStorageKey());
+    return saved === "cooperative" ? "cooperative" : "greedy";
+  } catch {
+    return "greedy";
+  }
+}
+function saveGestureModePref(mode) {
+  try {
+    localStorage.setItem(gestureModeStorageKey(), mode);
+  } catch {
+    // ストレージ不可でも致命的ではないため無視
+  }
+}
+
 const loading        = ref(true);
 const cardInfo       = ref(null);
 const childInfo      = ref(null);
@@ -331,6 +357,7 @@ const statusFilter   = ref("");
 const focusedHousing = ref(null);
 const mapContainer   = ref(null);
 const mapVisible     = ref(true);
+const gestureMode    = ref(loadGestureModePref()); // "greedy"(1本指) | "cooperative"(2本指)
 const headerEl       = ref(null);
 const headerHeight   = ref(64);
 const showModal      = ref(false);
@@ -581,6 +608,15 @@ function closeShareModal() {
   showShareModal.value = false;
 }
 
+// 地図のジェスチャー操作モードを切り替える（誤操作防止、#29）
+function toggleGestureMode() {
+  gestureMode.value = gestureMode.value === "greedy" ? "cooperative" : "greedy";
+  saveGestureModePref(gestureMode.value);
+  if (mapInstance) {
+    mapInstance.setOptions({ gestureHandling: gestureMode.value });
+  }
+}
+
 // 地図の表示/非表示を切り替える（再表示時はタイル再描画のためresizeイベントを発火）
 function toggleMap() {
   mapVisible.value = !mapVisible.value;
@@ -640,7 +676,7 @@ async function initMap() {
       ? { lat: Number(childInfo.value.ChildLat), lng: Number(childInfo.value.ChildLng) }
       : await fetchDefaultCenter();
 
-    mapInstance = createMap(mapContainer.value, center, 15);
+    mapInstance = createMap(mapContainer.value, center, 15, { gestureHandling: gestureMode.value });
 
     // 親カード（区域全体、赤）＋当該子カード（緑）のポリゴンを描画する（#27）。
     // KmlLayerでは2色の描き分けができないため、座標をJSONで取得して
