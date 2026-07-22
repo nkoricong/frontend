@@ -11,6 +11,13 @@
     </button>
   </div>
 
+  <!-- 常設の進捗表示（#21）：モーダルを閉じても、ジョブが実行中である限り表示され続ける -->
+  <div v-if="currentJobId" class="small text-muted mt-1">
+    <i class="fas fa-spinner fa-spin"></i>
+    {{ currentJobOperation === "export" ? "エクスポート" : "インポート" }}実行中 — 状態: {{ jobStatus }}
+    <span v-if="jobTotal != null">（{{ importedCount }} / {{ jobTotal }}件）</span>
+  </div>
+
   <!-- インポートモーダル -->
   <div
     class="modal fade"
@@ -121,7 +128,10 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { buildCsv, downloadCsv, parseCsvWithHeader } from "@/utils/csv.js";
-import { startCsvImportJob, getCsvImportJobStatus, cancelCsvImportJob } from "@/services/api.js";
+import {
+  startCsvImportJob, startCsvExportJob, getCsvImportJobStatus, cancelCsvImportJob,
+  downloadCsvExportJobResult,
+} from "@/services/api.js";
 
 const props = defineProps({
   title:               { type: String, required: true },
@@ -152,7 +162,11 @@ const props = defineProps({
   beforeImport:         { type: Function, default: null },
   // 指定すると、Worker上での同期バッチ処理の代わりにGitHub Actionsへジョブを
   // 投入する非同期方式になる（#18）。値はWorker側のtarget識別子（例:"detail"）。
+  // 指定した画面はエクスポートもジョブ方式になる（#21〜）。
   importTarget:         { type: String, default: null },
+  // () => object  エクスポート時にジョブへ渡す現在の絞込条件
+  //   （importTarget指定時のみ使用。指定が無ければ絞込無し＝全件を対象にする）
+  exportFilters:        { type: Function, default: null },
 });
 
 const emit = defineEmits(["imported"]);
@@ -179,8 +193,10 @@ const CANCELLED = Symbol("cancelled");
 // importTargetが指定されている画面はこちらを使う。ジョブIDをlocalStorageに
 // 保持し、モーダルを閉じたり画面を離れても、再度開けば進捗表示を再開できる。
 // ------------------------------------------------------------------
-const currentJobId = ref(null);
-const jobStatus    = ref(null); // "queued"|"running"|"completed"|"failed"|"cancelled"
+const currentJobId        = ref(null);
+const currentJobOperation = ref(null); // "import" | "export"
+const jobStatus            = ref(null); // "queued"|"running"|"completed"|"failed"|"cancelled"
+const jobTotal             = ref(null); // モーダル外の常設進捗表示用（インポート/エクスポート共通）
 let pollTimer = null;
 
 const jobStorageKey = computed(() => `csvImportJob:${props.importTarget}`);
@@ -210,17 +226,43 @@ async function pollJobStatus() {
   const job = res.job;
   jobStatus.value     = job.status;
   importedCount.value = job.processed ?? 0;
-  if (job.total != null) parseRows.value = new Array(job.total).fill(null);
+  jobTotal.value       = job.total ?? null;
+  if (job.operation === "import" && job.total != null) parseRows.value = new Array(job.total).fill(null);
 
   if (job.status === "completed" || job.status === "failed" || job.status === "cancelled") {
     stopPolling();
     importing.value      = false;
+    exporting.value      = false;
     cancelRequested.value = false;
     localStorage.removeItem(jobStorageKey.value);
     // ジョブが終了したら必ずクリアする。残したままだと次回モーダルを開いた際に
     // 「バックグラウンドで実行中」の表示が残り、新しいインポートを開始できない（#19）。
-    currentJobId.value = null;
-    jobStatus.value    = null;
+    currentJobId.value        = null;
+    jobStatus.value           = null;
+    currentJobOperation.value = null;
+
+    if (job.operation === "export") {
+      if (job.status === "completed") {
+        try {
+          const dlRes = await downloadCsvExportJobResult(job.jobId);
+          if (dlRes.status !== "success") throw new Error(dlRes.message || "結果の取得に失敗しました");
+          downloadCsv(dlRes.csvText, props.exportFilename);
+          resultOk.value      = true;
+          resultMessage.value = `エクスポートが完了しました。（${job.processed}件）`;
+        } catch (e) {
+          console.error(e);
+          resultOk.value      = false;
+          resultMessage.value = `エクスポート結果の取得に失敗しました：${e.message}`;
+        }
+      } else if (job.status === "cancelled") {
+        resultOk.value      = false;
+        resultMessage.value = "ユーザーの操作によりキャンセルしました。";
+      } else {
+        resultOk.value      = false;
+        resultMessage.value = `エクスポートに失敗しました：${(job.errors || []).join(" / ")}`;
+      }
+      return;
+    }
 
     if (job.status === "completed") {
       resultOk.value = job.errors.length === 0;
@@ -239,26 +281,59 @@ async function pollJobStatus() {
   }
 }
 
+function saveJobToStorage(jobId, operation) {
+  localStorage.setItem(jobStorageKey.value, JSON.stringify({ jobId, operation }));
+}
+
 async function runJobImport() {
   const jobRes = await startCsvImportJob(props.importTarget, rawCsvText.value, format.value, importMode.value);
   if (jobRes.status !== "success") {
     throw new Error(jobRes.message || "ジョブの開始に失敗しました");
   }
-  currentJobId.value = jobRes.jobId;
-  jobStatus.value     = "queued";
-  localStorage.setItem(jobStorageKey.value, jobRes.jobId);
+  currentJobId.value        = jobRes.jobId;
+  currentJobOperation.value = "import";
+  jobStatus.value            = "queued";
+  saveJobToStorage(jobRes.jobId, "import");
   startPolling();
+}
+
+async function runJobExport() {
+  exporting.value     = true;
+  resultMessage.value = "";
+  try {
+    const filters = props.exportFilters ? props.exportFilters() : {};
+    const cols    = format.value === "legacy" && props.hasLegacyFormat ? props.legacyColumns : props.columns;
+    const jobRes  = await startCsvExportJob(props.importTarget, format.value, filters, cols);
+    if (jobRes.status !== "success") {
+      throw new Error(jobRes.message || "ジョブの開始に失敗しました");
+    }
+    currentJobId.value        = jobRes.jobId;
+    currentJobOperation.value = "export";
+    jobStatus.value            = "queued";
+    saveJobToStorage(jobRes.jobId, "export");
+    startPolling();
+  } catch (e) {
+    console.error(e);
+    resultOk.value      = false;
+    resultMessage.value = `エクスポートの開始に失敗しました：${e.message}`;
+    exporting.value     = false;
+  }
 }
 
 // 画面を離れて戻ってきた場合（コンポーネント再マウント）に、実行中のジョブが
 // あればポーリングを自動再開する。
 onMounted(() => {
   if (!props.importTarget) return;
-  const savedJobId = localStorage.getItem(jobStorageKey.value);
-  if (savedJobId) {
-    currentJobId.value = savedJobId;
-    importing.value    = true;
+  const saved = localStorage.getItem(jobStorageKey.value);
+  if (!saved) return;
+  try {
+    const { jobId, operation } = JSON.parse(saved);
+    currentJobId.value        = jobId;
+    currentJobOperation.value = operation;
+    if (operation === "export") exporting.value = true; else importing.value = true;
     startPolling();
+  } catch {
+    localStorage.removeItem(jobStorageKey.value);
   }
 });
 
@@ -352,6 +427,10 @@ function downloadFormat() {
 }
 
 async function runExport() {
+  if (props.importTarget) {
+    await runJobExport();
+    return;
+  }
   exporting.value = true;
   try {
     const rows = await props.exportRows(format.value);

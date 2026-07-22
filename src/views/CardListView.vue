@@ -105,9 +105,13 @@
           v-if="canEdit"
           title="区域カード使用履歴"
           :columns="USAGE_HISTORY_CSV_COLUMNS"
+          :legacy-columns="USAGE_HISTORY_CSV_COLUMNS"
+          :has-legacy-format="true"
+          import-target="card_usage_history"
           format-template-filename="区域カード使用履歴CSVフォーマット.csv"
           export-filename="区域カード使用履歴.csv"
           :export-rows="exportUsageHistoryCsvRows"
+          :export-filters="getUsageHistoryExportFilters"
           :import-batch="importUsageHistoryCsvBatch"
         />
       </div>
@@ -308,7 +312,7 @@ import { useRouter } from "vue-router";
 import { useAuthStore } from "@/store/authStore.js";
 import {
   getCardList, getGroupMaster, getUserMaster, upsertCardList, getCardUsageHistory,
-  getAllCardUsageHistory, importCardUsageHistoryBatch,
+  importCardUsageHistoryBatch, getCardUsageHistoryExportPage,
 } from "@/services/api.js";
 import CardEditModal from "@/components/CardEditModal.vue";
 import CsvImportExportPanel from "@/components/CsvImportExportPanel.vue";
@@ -525,18 +529,32 @@ const USAGE_HISTORY_CSV_COLUMNS = [
   "description", "operator", "timestamp",
 ];
 
-async function exportUsageHistoryCsvRows() {
-  const res = await getAllCardUsageHistory();
-  return (res.history || []).map(h => ({
-    id: h.ID, card_no: h.CardNo, term: h.Term, status: h.Status, group: h.Group,
-    arrenger: h.Arrenger, checkout_date: h.CheckoutDate, limit_date: h.LimitDate,
-    return_date: h.ReturnDate, next_available_date: h.NextAvailableDate,
-    description: h.Description, operator: h.Operator, timestamp: h.Timestamp,
-  }));
+// テンプレート内はscript setupのref/computedが自動アンラップされるため、
+// 名前付き関数として切り出し、通常のscript setupコードから明示的に
+// .valueでアクセスする（DetailCsvView.vueと同じ理由）。
+function getUsageHistoryExportFilters() {
+  return { cardNos: filteredCards.value.map(c => c.CardNo) };
 }
 
-async function importUsageHistoryCsvBatch(rows) {
-  return importCardUsageHistoryBatch(rows);
+const EXPORT_PAGE_SIZE = 1000;
+
+// importTarget指定時、実際のエクスポートはジョブ方式（CsvImportExportPanel側）を
+// 使うため、この関数はプロップの都合上残しているだけで呼ばれない
+// （DetailCsvView.vue等の他画面と同じ既存の慣習）。
+async function exportUsageHistoryCsvRows() {
+  const rows = [];
+  let afterId = 0;
+  for (;;) {
+    const res = await getCardUsageHistoryExportPage(getUsageHistoryExportFilters(), afterId, EXPORT_PAGE_SIZE);
+    rows.push(...(res.rows || []));
+    if (!res.hasMore) break;
+    afterId = res.lastId;
+  }
+  return rows;
+}
+
+async function importUsageHistoryCsvBatch(rows, { format }) {
+  return importCardUsageHistoryBatch(rows, format);
 }
 
 onMounted(fetchData);

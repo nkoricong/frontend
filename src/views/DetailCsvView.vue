@@ -43,6 +43,7 @@
         format-template-filename="住戸リストCSVフォーマット.csv"
         export-filename="住戸リスト.csv"
         :export-rows="exportCsvRows"
+        :export-filters="getExportFilters"
         :import-batch="importCsvBatch"
         @imported="resetList"
       />
@@ -253,6 +254,15 @@ const IMPORT_MODES = [
 ];
 
 const EXPORT_PAGE_SIZE = 1000;
+
+// テンプレートの:export-filters="() => filters.value"は、script setupのref/
+// computedがテンプレート内では自動アンラップされる（_ctx.filtersが既にunref
+// 済みの値を返す）ため、そこに.valueを付けるとundefinedになってしまう。
+// 名前付き関数として切り出し、通常のscript setupコード（自動アンラップされない
+// スコープ）から明示的に.valueでアクセスすることで曖昧さを無くす。
+function getExportFilters() {
+  return filters.value;
+}
 
 async function exportCsvRows(format) {
   const out = [];

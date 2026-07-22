@@ -71,9 +71,11 @@
       <CsvImportExportPanel
         title="子カード使用履歴"
         :columns="USAGE_HISTORY_CSV_COLUMNS"
+        import-target="child_usage_history"
         format-template-filename="子カード使用履歴CSVフォーマット.csv"
         export-filename="子カード使用履歴.csv"
         :export-rows="exportUsageHistoryCsvRows"
+        :export-filters="getUsageHistoryExportFilters"
         :import-batch="importUsageHistoryCsvBatch"
       />
     </div>
@@ -339,7 +341,7 @@ import { GROUP_VIEWS, setLastGroupView } from "@/services/groupViewPreference.js
 import {
   getGroupChildList, getMinisterOptions, assignChildMinister,
   returnChildCard, cancelChildCheckout, getChildUsageHistory,
-  getAllChildUsageHistory, importChildUsageHistoryBatch,
+  importChildUsageHistoryBatch, getChildUsageHistoryExportPage,
 } from "@/services/api.js";
 import CsvImportExportPanel from "@/components/CsvImportExportPanel.vue";
 
@@ -748,13 +750,28 @@ const USAGE_HISTORY_CSV_COLUMNS = [
   "checkout_date", "limit_date", "return_date", "description", "operator", "timestamp",
 ];
 
+// テンプレート内はscript setupのref/computedが自動アンラップされるため、
+// 名前付き関数として切り出し、通常のscript setupコードから明示的に
+// .valueでアクセスする（DetailCsvView.vueと同じ理由）。
+function getUsageHistoryExportFilters() {
+  return { cardNos: [...new Set(filteredCards.value.map(c => c.CARDNO))] };
+}
+
+const EXPORT_PAGE_SIZE = 1000;
+
+// importTarget指定時、実際のエクスポートはジョブ方式（CsvImportExportPanel側）を
+// 使うため、この関数はプロップの都合上残しているだけで呼ばれない
+// （DetailCsvView.vue等の他画面と同じ既存の慣習）。
 async function exportUsageHistoryCsvRows() {
-  const res = await getAllChildUsageHistory();
-  return (res.history || []).map(h => ({
-    id: h.ID, card_no: h.CardNo, child_no: h.ChildNo, status: h.Status, minister: h.Minister,
-    checkout_date: h.CheckoutDate, limit_date: h.LimitDate, return_date: h.ReturnDate,
-    description: h.Description, operator: h.Operator, timestamp: h.Timestamp,
-  }));
+  const rows = [];
+  let afterId = 0;
+  for (;;) {
+    const res = await getChildUsageHistoryExportPage(getUsageHistoryExportFilters(), afterId, EXPORT_PAGE_SIZE);
+    rows.push(...(res.rows || []));
+    if (!res.hasMore) break;
+    afterId = res.lastId;
+  }
+  return rows;
 }
 
 async function importUsageHistoryCsvBatch(rows) {

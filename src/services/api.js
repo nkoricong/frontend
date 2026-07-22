@@ -534,8 +534,11 @@ export async function deleteChildListBatch(ids) {
 export async function getAllCardUsageHistory() {
   return callWorker({ funcName: "getAllCardUsageHistory" });
 }
-export async function importCardUsageHistoryBatch(rows) {
-  return callWorker({ funcName: "importCardUsageHistoryBatch", rows });
+export async function importCardUsageHistoryBatch(rows, format) {
+  return callWorker({ funcName: "importCardUsageHistoryBatch", rows, format });
+}
+export async function getCardUsageHistoryExportPage(filters, afterId, limit) {
+  return callWorker({ funcName: "getCardUsageHistoryExportPage", filters, afterId, limit });
 }
 
 export async function getAllChildUsageHistory() {
@@ -544,12 +547,18 @@ export async function getAllChildUsageHistory() {
 export async function importChildUsageHistoryBatch(rows) {
   return callWorker({ funcName: "importChildUsageHistoryBatch", rows });
 }
-
-export async function getVisitRecordExportPage(afterRowId, limit) {
-  return callWorker({ funcName: "getVisitRecordExportPage", afterRowId, limit });
+export async function getChildUsageHistoryExportPage(filters, afterId, limit) {
+  return callWorker({ funcName: "getChildUsageHistoryExportPage", filters, afterId, limit });
 }
-export async function importVisitRecordBatch(rows, format) {
-  return callWorker({ funcName: "importVisitRecordBatch", rows, format });
+
+export async function getVisitRecordExportPage(filters, afterRowId, limit) {
+  return callWorker({ funcName: "getVisitRecordExportPage", filters, afterRowId, limit });
+}
+export async function getVisitRecordListPageOffset(filters, offset, limit) {
+  return callWorker({ funcName: "getVisitRecordListPageOffset", filters, offset, limit });
+}
+export async function importVisitRecordBatch(rows, format, mode) {
+  return callWorker({ funcName: "importVisitRecordBatch", rows, format, mode });
 }
 
 export async function importUserMasterBatch(rows) {
@@ -579,13 +588,19 @@ export async function clearDetailAll() {
   return callWorker({ funcName: "clearDetailAll" });
 }
 
-// ---- CSVインポートジョブ（GitHub Actionsでバックグラウンド実行, #18） ----
+// ---- CSVインポート／エクスポートジョブ（GitHub Actionsでバックグラウンド実行, #18, #21〜） ----
 export async function startCsvImportJob(target, csvText, format, mode) {
   return callWorker({ funcName: "startCsvImportJob", target, csvText, format, mode });
+}
+export async function startCsvExportJob(target, format, filters, columns) {
+  return callWorker({ funcName: "startCsvExportJob", target, format, filters, columns });
 }
 export async function getCsvImportJobStatus(jobId) {
   return callWorker({ funcName: "getCsvImportJobStatus", jobId });
 }
 export async function cancelCsvImportJob(jobId) {
   return callWorker({ funcName: "cancelCsvImportJob", jobId });
+}
+export async function downloadCsvExportJobResult(jobId) {
+  return callWorker({ funcName: "downloadCsvExportJobResult", jobId });
 }
