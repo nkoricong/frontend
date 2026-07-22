@@ -105,7 +105,7 @@
           v-if="canEdit"
           title="区域カード使用履歴"
           :columns="USAGE_HISTORY_CSV_COLUMNS"
-          :legacy-columns="USAGE_HISTORY_CSV_COLUMNS"
+          :legacy-columns="LEGACY_USAGE_HISTORY_CSV_COLUMNS"
           :has-legacy-format="true"
           import-target="card_usage_history"
           format-template-filename="区域カード使用履歴CSVフォーマット.csv"
@@ -527,6 +527,14 @@ const USAGE_HISTORY_CSV_COLUMNS = [
   "id", "card_no", "term", "status", "group", "arrenger",
   "checkout_date", "limit_date", "return_date", "next_available_date",
   "description", "operator", "timestamp",
+];
+// 旧アプリ（GAS版）のCSVは列名・列構成が現アプリ用と全く異なる
+// （実データ CARD_UsageLog.csv で確認、#28）。ID・Term（日本語表記の年月
+// ラベル）・Renew・Overdueは現行スキーマに対応する列が無いため取り込み対象外。
+const LEGACY_USAGE_HISTORY_CSV_COLUMNS = [
+  "ID", "CardNo", "Term", "Status", "Group", "Arrenger",
+  "StartDate", "LimitDate", "CheckoutDate", "ReturnDate", "NextAvailableDate",
+  "Renew", "Overdue", "Description", "TimeStamp", "Operator",
 ];
 
 // テンプレート内はscript setupのref/computedが自動アンラップされるため、
