@@ -217,6 +217,10 @@ async function pollJobStatus() {
     importing.value      = false;
     cancelRequested.value = false;
     localStorage.removeItem(jobStorageKey.value);
+    // ジョブが終了したら必ずクリアする。残したままだと次回モーダルを開いた際に
+    // 「バックグラウンドで実行中」の表示が残り、新しいインポートを開始できない（#19）。
+    currentJobId.value = null;
+    jobStatus.value    = null;
 
     if (job.status === "completed") {
       resultOk.value = job.errors.length === 0;
@@ -373,7 +377,11 @@ function openImportModal() {
 }
 
 function closeImportModal() {
-  if (importing.value) return;
+  // ジョブ方式（importTarget指定あり）はバックグラウンドで処理が継続するため、
+  // 実行中でも閉じてよい（進捗はlocalStorageのjobIdから再開時に復元される）。
+  // 従来の同期バッチ方式は、閉じても処理自体は止まらないが進捗の見失いを防ぐため
+  // 実行中は閉じさせない。
+  if (importing.value && !props.importTarget) return;
   showModal.value = false;
 }
 
