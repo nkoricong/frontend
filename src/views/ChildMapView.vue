@@ -612,10 +612,13 @@ function closeShareModal() {
   showShareModal.value = false;
 }
 
-// 印刷／PDF出力：この画面自体は変更せず、専用の印刷ページを新しいタブで開く（#30/#33改）
+// 印刷／PDF出力：この画面自体は変更せず、専用の印刷ページへ遷移する（#30/#33改）。
+// 新しいタブ（window.open）で開くと、別ブラウジングコンテキストとしてアプリが
+// 再読み込みされるためFirebase認証セッションの復元待ちでログイン画面に
+// 落ちることがあった。同一タブ内でVue Routerにより遷移すれば、既に認証済みの
+// 同じアプリインスタンス（Piniaの状態含む）がそのまま使われるため確実。
 function openPrintPage() {
-  const url = `${window.location.origin}${window.location.pathname}#/childprint/${props.cardNo}/${props.childNo}`;
-  window.open(url, "_blank");
+  router.push({ name: "childPrint", params: { cardNo: props.cardNo, childNo: props.childNo } });
 }
 
 // 地図のジェスチャー操作モードを切り替える（誤操作防止、#29）

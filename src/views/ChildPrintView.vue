@@ -10,7 +10,7 @@
 
   <!-- 画面上のツールバー（印刷時は非表示） -->
   <div class="toolbar no-print">
-    <button class="btn btn-link p-0 text-center" @click="closeWindow">
+    <button class="btn btn-link p-0 text-center" @click="router.back()">
       <i class="fas fa-arrow-circle-left fa-2x"></i>
       <div class="small">戻る</div>
     </button>
@@ -89,6 +89,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from "vue";
+import { useRouter } from "vue-router";
 import QRCode from "qrcode";
 import { getChildDetail, getChildPolygons, createChildPrintShare } from "@/services/api.js";
 import { loadGoogleMaps, createMap } from "@/services/maps.js";
@@ -99,6 +100,8 @@ const props = defineProps({
   childNo: { type: Number, required: true },
 });
 
+const router = useRouter();
+
 const loading      = ref(true);
 const loadError    = ref("");
 const printLoading = ref(false);
@@ -108,10 +111,6 @@ const cardInfo  = ref(null);
 const childInfo = ref(null);
 const houses    = ref([]);
 const mapContainer = ref(null);
-
-function closeWindow() {
-  window.close();
-}
 
 function doPrint() {
   window.print();
