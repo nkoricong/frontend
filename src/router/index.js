@@ -51,6 +51,15 @@ const routes = [
     }),
   },
   {
+    path:      "/childprint/:cardNo/:childNo",
+    name:      "childPrint",
+    component: () => import("@/views/ChildPrintView.vue"),
+    props:     route => ({
+      cardNo:  Number(route.params.cardNo),
+      childNo: Number(route.params.childNo),
+    }),
+  },
+  {
     path:      "/cardlist",
     name:      "cardList",
     component: () => import("@/views/CardListView.vue"),
