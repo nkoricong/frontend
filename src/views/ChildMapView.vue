@@ -749,6 +749,7 @@ async function initMap() {
               fillColor: "#F44336", fillOpacity: 0.1,
               strokeColor: "#D32F2F", strokeWeight: 2,
               clickable: false,
+              zIndex: 1,
             });
             wholeEntry.Path.forEach(p => bounds.extend(p));
           }
@@ -757,8 +758,9 @@ async function initMap() {
               map: mapInstance,
               paths: childEntry.Path,
               fillColor: "#4CAF50", fillOpacity: 0.35,
-              strokeColor: "#388E3C", strokeWeight: 2,
+              strokeColor: "#2E7D32", strokeWeight: 3,
               clickable: false,
+              zIndex: 2,
             });
             childEntry.Path.forEach(p => bounds.extend(p));
           }
