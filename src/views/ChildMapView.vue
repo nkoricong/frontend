@@ -10,7 +10,7 @@
   <main class="container-fluid py-2">
 
     <!-- ヘッダー -->
-    <header class="sticky-top bg-white mb-2 py-2 border-bottom" ref="headerEl">
+    <header class="sticky-top bg-white mb-2 py-2 border-bottom no-print" ref="headerEl">
       <div class="d-flex justify-content-between align-items-center px-2">
         <button class="btn btn-link p-0 text-center" @click="router.back()">
           <i class="fas fa-arrow-circle-left fa-2x"></i>
@@ -40,6 +40,10 @@
             <i class="fas fa-share-alt fa-2x"></i>
             <div class="small">共有</div>
           </button>
+          <button class="btn btn-link p-0 text-center" :disabled="printLoading" @click="printChildCard">
+            <i class="fas fa-print fa-2x"></i>
+            <div class="small">印刷/PDF</div>
+          </button>
           <button class="btn btn-link p-0 text-center" @click="router.push({ name: 'mainMenu' })">
             <i class="fas fa-home fa-2x"></i>
             <div class="small">ホーム</div>
@@ -49,21 +53,43 @@
     </header>
 
     <!-- オフラインキャッシュ利用中の案内 -->
-    <div v-if="usingCachedData" class="alert alert-warning py-1 px-2 small mb-2 mx-2">
+    <div v-if="usingCachedData" class="alert alert-warning py-1 px-2 small mb-2 mx-2 no-print">
       <i class="fas fa-plane"></i> オフラインで保存したデータを表示しています
     </div>
-    <div v-if="usingCachedData && cachedOfflineUser" class="small text-muted px-2 mb-2 text-start">
+    <div v-if="usingCachedData && cachedOfflineUser" class="small text-muted px-2 mb-2 text-start no-print">
       <i class="fas fa-user"></i>
       {{ cachedOfflineUser.userName || "-" }}（UserID: {{ cachedOfflineUser.userId ?? "-" }}）
       ／ グループ：{{ cachedOfflineUser.userGroup || "-" }}
     </div>
-    <div v-if="loadError" class="alert alert-danger m-2">{{ loadError }}</div>
+    <div v-if="loadError" class="alert alert-danger m-2 no-print">{{ loadError }}</div>
+
+    <!-- 印刷／PDF出力専用：貸出情報＋QRコード（画面には表示しない、#30） -->
+    <div class="print-only print-info-block">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <h5 class="mb-2">子カード貸出情報</h5>
+          <table class="print-info-table">
+            <tbody>
+              <tr><th>区域カード番号</th><td>{{ cardInfo?.CardNo ?? "-" }}</td></tr>
+              <tr><th>子カード番号</th><td>{{ childInfo?.ChildNo ?? "-" }}</td></tr>
+              <tr><th>子カード名</th><td>{{ childInfo?.ChildBlock ?? "-" }}</td></tr>
+              <tr><th>総件数</th><td>{{ houses.length }}件</td></tr>
+              <tr><th>使用開始日</th><td>{{ childInfo?.ChildStartDate ?? "-" }}</td></tr>
+              <tr><th>使用期限</th><td>{{ childInfo?.ChildLimitDate ?? "-" }}</td></tr>
+              <tr><th>割当グループ</th><td>{{ childInfo?.ChildGroup ?? "-" }}</td></tr>
+              <tr><th>割当奉仕者</th><td>{{ childInfo?.ChildMinister ?? "-" }}</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <img v-if="printQrDataUrl" :src="printQrDataUrl" alt="共有QRコード" class="print-qr" />
+      </div>
+    </div>
 
     <!-- 地図（オフライン時は保存済みの静止画像を表示） -->
     <!-- 住戸一覧をスクロールしても地図が隠れないよう、ヘッダー直下に固定表示する -->
     <template v-if="!usingCachedData">
       <div class="map-sticky-wrapper" :style="{ top: headerHeight + 'px' }">
-        <div class="d-flex justify-content-end gap-2 px-2 mb-1">
+        <div class="d-flex justify-content-end gap-2 px-2 mb-1 no-print">
           <button class="btn btn-sm btn-outline-secondary" @click="toggleGestureMode">
             <i class="fas fa-hand-pointer"></i>
             {{ gestureMode === "greedy" ? "指2本で操作" : "指1本で操作" }}
@@ -76,12 +102,34 @@
         <div id="mapContainer" ref="mapContainer" v-show="mapVisible"></div>
       </div>
     </template>
-    <div v-else-if="cachedMapImage" class="px-2 mb-2">
+    <div v-else-if="cachedMapImage" class="px-2 mb-2 no-print">
       <img :src="cachedMapImage" alt="保存済みの地図画像" class="img-fluid rounded border" />
     </div>
 
+    <!-- 印刷／PDF出力専用：住戸リスト（画面には表示しない、#30） -->
+    <table class="print-only print-house-table">
+      <thead>
+        <tr>
+          <th>住戸NO</th><th>訪問NG</th><th>氏名</th><th>住所</th><th>建物</th>
+          <th>訪問ステータス</th><th>最新訪問日</th><th>最後に会えた日</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="h in printHouses" :key="'p-' + h.DetailID">
+          <td class="text-center">{{ h.HousingNo }}</td>
+          <td class="text-center">{{ h.NGFlag === "不可" ? "NG" : "" }}</td>
+          <td>{{ h.FamilyName || "(表記なし)" }}</td>
+          <td>{{ houseAddress(h) }}</td>
+          <td>{{ h.BuildingName }} {{ h.RoomNo }}</td>
+          <td class="text-center">{{ displayStatus(h) }}</td>
+          <td class="text-center">{{ latestVisitDate(h) }}</td>
+          <td class="text-center">{{ lastMetDate(h) }}</td>
+        </tr>
+      </tbody>
+    </table>
+
     <!-- 住戸一覧 -->
-    <div class="mt-3 px-2">
+    <div class="mt-3 px-2 no-print">
       <div class="d-flex justify-content-between align-items-center mb-2">
         <h6 class="mb-0">住戸一覧（{{ houses.length }}件）</h6>
         <select class="form-select form-select-sm w-auto" v-model="statusFilter">
@@ -309,7 +357,7 @@ import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from "vue";
 import { useRouter } from "vue-router";
 import QRCode from "qrcode";
 import { useAuthStore } from "@/store/authStore.js";
-import { getChildDetail, getChildPolygons, createChildShare } from "@/services/api.js";
+import { getChildDetail, getChildPolygons, createChildShare, createChildPrintShare } from "@/services/api.js";
 import { loadGoogleMaps, createMap, addMarker, setMarkerFocused } from "@/services/maps.js";
 import { fetchDefaultCenter } from "@/services/mapCenter.js";
 import { isChildOffline, getOfflineChild, findOfflineEntryByCard, isOnline } from "@/services/offline.js";
@@ -368,6 +416,10 @@ const showShareModal = ref(false);
 const shareLoading   = ref(false);
 const shareQrDataUrl = ref("");
 const shareError     = ref("");
+
+const printLoading    = ref(false);
+const printQrDataUrl  = ref("");
+let printMapVisibleBefore = true;
 
 const showHouseInfoModal = ref(false);
 const houseInfoTarget    = ref(null);
@@ -490,6 +542,23 @@ function latestVisitDate(h) {
   return latestRecord(h)?.VisitDate || "-";
 }
 
+// 最後に会えた日（結果が「済」の訪問記録のうち最新のもの、印刷用、#30）
+function lastMetDate(h) {
+  if (!h.VRecord || h.VRecord.length === 0) return "-";
+  const met = h.VRecord
+    .filter(v => (v.Result || "").includes("済"))
+    .sort((a, b) => {
+      if (a.VisitDate !== b.VisitDate) return (b.VisitDate || "").localeCompare(a.VisitDate || "");
+      return (TIME_ORDER[b.Time] || 0) - (TIME_ORDER[a.Time] || 0);
+    });
+  return met[0]?.VisitDate || "-";
+}
+
+// 印刷用の住戸リスト（建物グルーピングをせず、住戸番号順にフラット表示、#30）
+const printHouses = computed(() => {
+  return [...houses.value].sort((a, b) => (a.HousingNo ?? 0) - (b.HousingNo ?? 0));
+});
+
 // NGを考慮しない「生の」訪問ステータス（訪問結果の履歴のみから算出）
 function rawVisitStatus(h) {
   const top = latestRecord(h)?.Result || "";
@@ -606,6 +675,37 @@ async function openShareDialog() {
 
 function closeShareModal() {
   showShareModal.value = false;
+}
+
+// 印刷／PDF出力：貸出情報・地図・住戸リストをB5横幅に収まるレイアウトで出力する（#30）。
+// 印刷とPDFはレイアウトを分けず、いずれもブラウザの印刷ダイアログ（window.print、
+// 「PDFに保存」選択可）を経由する。QRコードは使用期限内なら何度でもスキャンできる
+// 印刷専用トークン（createChildPrintShare）を都度発行する。
+async function printChildCard() {
+  if (!childInfo.value?.ChildID) return;
+  printLoading.value = true;
+  try {
+    const res = await createChildPrintShare(childInfo.value.ChildID);
+    if (res.status === "success") {
+      const shareUrl = `${window.location.origin}${window.location.pathname}#/mypage?share=${encodeURIComponent(res.token)}`;
+      printQrDataUrl.value = await QRCode.toDataURL(shareUrl, { width: 160, margin: 1 });
+    }
+  } catch (e) {
+    console.error("印刷用QRコードの生成に失敗しました:", e);
+  } finally {
+    printLoading.value = false;
+  }
+  await nextTick();
+  window.print();
+}
+
+// 印刷時は「地図を隠す」状態でも地図を強制的に表示し、印刷後は元の表示状態に戻す
+function handleBeforePrint() {
+  printMapVisibleBefore = mapVisible.value;
+  mapVisible.value = true;
+}
+function handleAfterPrint() {
+  mapVisible.value = printMapVisibleBefore;
 }
 
 // 地図のジェスチャー操作モードを切り替える（誤操作防止、#29）
@@ -747,6 +847,8 @@ onMounted(async () => {
   await nextTick();
   updateHeaderHeight();
   window.addEventListener("resize", updateHeaderHeight);
+  window.addEventListener("beforeprint", handleBeforePrint);
+  window.addEventListener("afterprint", handleAfterPrint);
 
   try {
     if (!isOnline()) throw new Error("offline");
@@ -784,6 +886,8 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener("resize", updateHeaderHeight);
+  window.removeEventListener("beforeprint", handleBeforePrint);
+  window.removeEventListener("afterprint", handleAfterPrint);
   if (parentPolygon) parentPolygon.setMap(null);
   if (childPolygon) childPolygon.setMap(null);
   if (infoWindow) infoWindow.close();
@@ -850,5 +954,58 @@ onUnmounted(() => {
   background-color: #6f42c1;
   color: #fff;
   vertical-align: middle;
+}
+
+/* ---- 印刷／PDF出力（#30） ---- */
+.print-only { display: none; }
+
+.print-info-table {
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.print-info-table th {
+  text-align: left;
+  padding: 2px 10px 2px 0;
+  white-space: nowrap;
+  color: #495057;
+}
+.print-info-table td {
+  padding: 2px 0;
+  font-weight: 600;
+}
+.print-qr {
+  width: 100px;
+  height: 100px;
+  flex: none;
+}
+
+.print-house-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10px;
+}
+.print-house-table th,
+.print-house-table td {
+  border: 1px solid #999;
+  padding: 2px 4px;
+}
+.print-house-table th {
+  background: #eee;
+}
+
+@media print {
+  .no-print { display: none !important; }
+  .print-only { display: block !important; }
+
+  @page { size: B5 landscape; margin: 10mm; }
+
+  .map-sticky-wrapper {
+    position: static !important;
+    top: auto !important;
+  }
+  #mapContainer {
+    width: 100% !important;
+    height: 90mm !important;
+  }
 }
 </style>

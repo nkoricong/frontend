@@ -278,6 +278,14 @@ export async function endChildShare(shareId) {
   return callWorker({ funcName: "endChildShare", ShareID: shareId });
 }
 
+/**
+ * 子カードの印刷／PDF出力用QRトークンを発行する（#30）。
+ * 通常の共有と異なり使用期限内は何度でも再利用できる固定トークン。
+ */
+export async function createChildPrintShare(childId) {
+  return callWorker({ funcName: "createChildPrintShare", ChildID: childId });
+}
+
 /** 子カード全件を取得する（管理画面用） */
 export async function getChildListAll(filters = {}) {
   return callWorker({ funcName: "getChildListAll", ...filters });
