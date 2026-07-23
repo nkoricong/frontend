@@ -956,38 +956,40 @@ onUnmounted(() => {
   vertical-align: middle;
 }
 
-/* ---- 印刷／PDF出力（#30） ---- */
+/* ---- 印刷／PDF出力（#30, #32でB5縦向きに変更） ---- */
 .print-only { display: none; }
 
 .print-info-table {
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: 9px;
 }
 .print-info-table th {
   text-align: left;
-  padding: 2px 10px 2px 0;
+  padding: 1px 8px 1px 0;
   white-space: nowrap;
   color: #495057;
 }
 .print-info-table td {
-  padding: 2px 0;
+  padding: 1px 0;
   font-weight: 600;
 }
 .print-qr {
-  width: 100px;
-  height: 100px;
+  width: 70px;
+  height: 70px;
   flex: none;
 }
 
 .print-house-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
-  font-size: 10px;
+  font-size: 7.5px;
 }
 .print-house-table th,
 .print-house-table td {
   border: 1px solid #999;
-  padding: 2px 4px;
+  padding: 1px 2px;
+  overflow-wrap: break-word;
 }
 .print-house-table th {
   background: #eee;
@@ -997,7 +999,8 @@ onUnmounted(() => {
   .no-print { display: none !important; }
   .print-only { display: block !important; }
 
-  @page { size: B5 landscape; margin: 10mm; }
+  /* #32：用紙サイズはB5・縦向き。用紙の横幅（B5縦の短辺）に収まるようレイアウトする */
+  @page { size: B5 portrait; margin: 8mm; }
 
   .map-sticky-wrapper {
     position: static !important;
@@ -1005,7 +1008,7 @@ onUnmounted(() => {
   }
   #mapContainer {
     width: 100% !important;
-    height: 90mm !important;
+    height: 100mm !important;
   }
 }
 </style>
