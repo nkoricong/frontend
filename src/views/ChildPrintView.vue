@@ -63,8 +63,8 @@
           <th class="col-no">NO</th>
           <th class="col-name">氏名</th>
           <th class="col-address">番地</th>
-          <th class="col-status">訪問状況</th>
-          <th class="col-visitdates">最新訪問日／最後に会えた日</th>
+          <th class="col-status">訪問状況／最新訪問日</th>
+          <th class="col-lastmet">最後に会えた日</th>
           <th class="col-note">ノート</th>
         </tr>
       </thead>
@@ -76,11 +76,11 @@
             <div>{{ houseAddress(h) }}</div>
             <div>{{ h.BuildingName }} {{ h.RoomNo }}</div>
           </td>
-          <td class="text-center col-status" :style="{ color: printVisitStatusColor(h) }">{{ printVisitStatusLabel(h) }}</td>
-          <td class="col-visitdates">
-            <div>最新の訪問日：{{ latestVisitDate(h) }}</div>
-            <div>最後に会えた日：{{ lastMetDate(h) }}</div>
+          <td class="text-center col-status">
+            <div class="status-value" :style="{ color: printVisitStatusColor(h) }">{{ printVisitStatusLabel(h) }}</div>
+            <div class="status-date">{{ latestVisitDate(h) }}</div>
           </td>
+          <td class="text-center col-lastmet">{{ lastMetDate(h) }}</td>
           <td class="col-note"></td>
         </tr>
       </tbody>
@@ -405,13 +405,14 @@ onMounted(async () => {
   background: #F5F7FA;
   font-weight: 700;
 }
-.print-house-table td.col-status    { font-weight: 700; }
-.print-house-table .col-no         { width: 7%; }
-.print-house-table .col-name       { width: 18%; }
-.print-house-table .col-address    { width: 20%; }
-.print-house-table .col-status     { width: 14%; }
-.print-house-table .col-visitdates { width: 23%; }
-.print-house-table .col-note       { width: 18%; }
+.print-house-table .status-value { font-weight: 700; }
+.print-house-table .status-date  { color: #6B7280; }
+.print-house-table .col-no       { width: 7%; }
+.print-house-table .col-name     { width: 18%; }
+.print-house-table .col-address  { width: 20%; }
+.print-house-table .col-status   { width: 20%; }
+.print-house-table .col-lastmet  { width: 17%; }
+.print-house-table .col-note     { width: 18%; }
 
 .print-footer {
   margin: 4px 10mm 0;
