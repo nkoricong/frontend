@@ -63,26 +63,32 @@
     </div>
     <div v-if="loadError" class="alert alert-danger m-2 no-print">{{ loadError }}</div>
 
-    <!-- 印刷／PDF出力専用：貸出情報＋QRコード（画面には表示しない、#30） -->
-    <div class="print-only print-info-block">
-      <div class="d-flex justify-content-between align-items-start">
-        <div>
-          <h5 class="mb-2">子カード貸出情報</h5>
-          <table class="print-info-table">
-            <tbody>
-              <tr><th>区域カード番号</th><td>{{ cardInfo?.CardNo ?? "-" }}</td></tr>
-              <tr><th>子カード番号</th><td>{{ childInfo?.ChildNo ?? "-" }}</td></tr>
-              <tr><th>子カード名</th><td>{{ childInfo?.ChildBlock ?? "-" }}</td></tr>
-              <tr><th>総件数</th><td>{{ houses.length }}件</td></tr>
-              <tr><th>使用開始日</th><td>{{ childInfo?.ChildStartDate ?? "-" }}</td></tr>
-              <tr><th>使用期限</th><td>{{ childInfo?.ChildLimitDate ?? "-" }}</td></tr>
-              <tr><th>割当グループ</th><td>{{ childInfo?.ChildGroup ?? "-" }}</td></tr>
-              <tr><th>割当奉仕者</th><td>{{ childInfo?.ChildMinister ?? "-" }}</td></tr>
-            </tbody>
-          </table>
+    <!-- 印刷／PDF出力専用：ヘッダー＋貸出情報＋QRコード（画面には表示しない、#30/#33） -->
+    <!-- 添付の「子カード印刷サンプル.pptx」のレイアウトを再現する -->
+    <div class="print-only print-header-bar">
+      <span class="print-status-badge">【{{ childInfo?.ChildStatus ?? "-" }}】</span>
+      <span class="print-header-title">{{ childInfo?.ChildBlock ?? "-" }}</span>
+    </div>
+    <div class="print-only print-meta-panel">
+      <div class="print-meta-grid">
+        <div class="print-meta-cell">
+          <div class="print-meta-label">使用開始日</div>
+          <div class="print-meta-value">{{ childInfo?.ChildStartDate ?? "-" }}</div>
         </div>
-        <img v-if="printQrDataUrl" :src="printQrDataUrl" alt="共有QRコード" class="print-qr" />
+        <div class="print-meta-cell">
+          <div class="print-meta-label">割当グループ</div>
+          <div class="print-meta-value">{{ childInfo?.ChildGroup ?? "-" }}</div>
+        </div>
+        <div class="print-meta-cell">
+          <div class="print-meta-label">使用期限</div>
+          <div class="print-meta-value">{{ childInfo?.ChildLimitDate ?? "-" }}</div>
+        </div>
+        <div class="print-meta-cell">
+          <div class="print-meta-label">割当奉仕者</div>
+          <div class="print-meta-value">{{ childInfo?.ChildMinister ?? "-" }}</div>
+        </div>
       </div>
+      <img v-if="printQrDataUrl" :src="printQrDataUrl" alt="共有QRコード" class="print-qr" />
     </div>
 
     <!-- 地図（オフライン時は保存済みの静止画像を表示） -->
@@ -106,27 +112,37 @@
       <img :src="cachedMapImage" alt="保存済みの地図画像" class="img-fluid rounded border" />
     </div>
 
-    <!-- 印刷／PDF出力専用：住戸リスト（画面には表示しない、#30） -->
+    <!-- 印刷／PDF出力専用：訪問リスト見出し＋住戸リスト（画面には表示しない、#30/#33） -->
+    <div class="print-only print-section-header">
+      <span class="print-section-tick"></span>
+      <span class="print-section-title">訪問リスト</span>
+      <span class="print-section-sub">住所はすべて {{ cardInfo?.TownName ?? "-" }}</span>
+    </div>
     <table class="print-only print-house-table">
       <thead>
         <tr>
-          <th>住戸NO</th><th>訪問NG</th><th>氏名</th><th>住所</th><th>建物</th>
-          <th>訪問ステータス</th><th>最新訪問日</th><th>最後に会えた日</th>
+          <th class="col-no">NO</th>
+          <th class="col-name">氏名</th>
+          <th class="col-banchi">番地</th>
+          <th class="col-status">訪問状況</th>
+          <th class="col-date">最新訪問日</th>
+          <th class="col-date">最後に会えた日</th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="h in printHouses" :key="'p-' + h.DetailID">
-          <td class="text-center">{{ h.HousingNo }}</td>
-          <td class="text-center">{{ h.NGFlag === "不可" ? "NG" : "" }}</td>
-          <td>{{ h.FamilyName || "(表記なし)" }}</td>
-          <td>{{ houseAddress(h) }}</td>
-          <td>{{ h.BuildingName }} {{ h.RoomNo }}</td>
-          <td class="text-center">{{ displayStatus(h) }}</td>
-          <td class="text-center">{{ latestVisitDate(h) }}</td>
-          <td class="text-center">{{ lastMetDate(h) }}</td>
+          <td class="text-center col-no">{{ h.HousingNo }}</td>
+          <td>{{ h.FamilyName || "（表記なし）" }}</td>
+          <td class="text-center col-banchi">{{ printBanchi(h) }}</td>
+          <td class="text-center col-status" :style="{ color: printVisitStatusColor(h) }">{{ printVisitStatusLabel(h) }}</td>
+          <td class="text-center col-date">{{ latestVisitDate(h) }}</td>
+          <td class="text-center col-date">{{ lastMetDate(h) }}</td>
         </tr>
       </tbody>
     </table>
+    <div class="print-only print-footer">
+      使用期限：{{ childInfo?.ChildLimitDate ?? "-" }}　／　子カード貸出情報 — {{ childInfo?.ChildBlock ?? "-" }}
+    </div>
 
     <!-- 住戸一覧 -->
     <div class="mt-3 px-2 no-print">
@@ -559,6 +575,30 @@ const printHouses = computed(() => {
   return [...houses.value].sort((a, b) => (a.HousingNo ?? 0) - (b.HousingNo ?? 0));
 });
 
+// 印刷用の「番地」欄：町名は見出しに共通表記済みのため、丁目-番地のみを表示する（#33）
+function printBanchi(h) {
+  if (h.AddressSW === "直接入力") {
+    return `${h.InputCho ?? ""}-${h.InputBanchi ?? ""}`;
+  }
+  return `${h.CSVCho ?? ""}-${h.CSVBanchi ?? ""}`;
+}
+
+// 印刷用の訪問状況ラベル：訪問NGを最優先、「済」は「訪問済」と表記する（#33）
+const PRINT_STATUS_COLORS = {
+  "未訪問": "#6B7280",
+  "訪問済": "#1E7A46",
+  "不在":   "#B45309",
+  "訪問NG": "#B91C1C",
+};
+function printVisitStatusLabel(h) {
+  if (h.NGFlag === "不可") return "訪問NG";
+  const raw = h.VisitStatus || "未訪問";
+  return raw === "済" ? "訪問済" : raw;
+}
+function printVisitStatusColor(h) {
+  return PRINT_STATUS_COLORS[printVisitStatusLabel(h)] || "#6B7280";
+}
+
 // NGを考慮しない「生の」訪問ステータス（訪問結果の履歴のみから算出）
 function rawVisitStatus(h) {
   const top = latestRecord(h)?.Result || "";
@@ -956,22 +996,58 @@ onUnmounted(() => {
   vertical-align: middle;
 }
 
-/* ---- 印刷／PDF出力（#30, #32でB5縦向きに変更） ---- */
+/* ---- 印刷／PDF出力（#30, #33で添付「子カード印刷サンプル.pptx」の様式を再現） ---- */
 .print-only { display: none; }
 
-.print-info-table {
-  border-collapse: collapse;
-  font-size: 9px;
+/* ヘッダーバー（紺地・全幅フルブリード、ステータスバッジ＋町名タイトル） */
+.print-header-bar {
+  background: #1F3A63;
+  color: #fff;
+  padding: 8px 10mm;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
-.print-info-table th {
-  text-align: left;
-  padding: 1px 8px 1px 0;
+.print-status-badge {
+  background: #2C4B7C;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 6px;
   white-space: nowrap;
-  color: #495057;
 }
-.print-info-table td {
-  padding: 1px 0;
-  font-weight: 600;
+.print-header-title {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+/* 貸出情報パネル（2x2ラベル/値グリッド＋右側にQR） */
+.print-meta-panel {
+  margin: 8px 10mm 0;
+  padding: 8px 12px;
+  background: #F5F7FA;
+  border: 1px solid #D6DCE5;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.print-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 24px;
+  row-gap: 6px;
+}
+.print-meta-label {
+  font-size: 7px;
+  color: #6B7280;
+}
+.print-meta-value {
+  font-size: 11px;
+  font-weight: 700;
+  color: #1F3A63;
 }
 .print-qr {
   width: 70px;
@@ -979,36 +1055,82 @@ onUnmounted(() => {
   flex: none;
 }
 
+/* 訪問リスト見出し（紺のtick＋タイトル、右に町名の注記） */
+.print-section-header {
+  margin: 10px 10mm 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.print-section-tick {
+  width: 2px;
+  height: 10px;
+  background: #1F3A63;
+  display: inline-block;
+}
+.print-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: #1F2937;
+}
+.print-section-sub {
+  margin-left: auto;
+  font-size: 7px;
+  color: #6B7280;
+}
+
+/* 住戸（訪問）リスト表 */
 .print-house-table {
-  width: 100%;
+  width: calc(100% - 20mm);
+  margin: 0 10mm;
   table-layout: fixed;
   border-collapse: collapse;
   font-size: 7.5px;
 }
 .print-house-table th,
 .print-house-table td {
-  border: 1px solid #999;
-  padding: 1px 2px;
+  border: 1px solid #D6DCE5;
+  padding: 2px 3px;
   overflow-wrap: break-word;
 }
 .print-house-table th {
-  background: #eee;
+  background: #F5F7FA;
+  font-weight: 700;
+}
+.print-house-table td.col-status { font-weight: 700; }
+.print-house-table .col-no      { width: 8%; }
+.print-house-table .col-name    { width: 21%; }
+.print-house-table .col-banchi  { width: 13%; }
+.print-house-table .col-status  { width: 17%; }
+.print-house-table .col-date    { width: 15%; }
+.print-house-table .col-date:last-child { width: 26%; }
+
+.print-footer {
+  margin: 4px 10mm 0;
+  font-size: 7px;
+  color: #6B7280;
+  text-align: right;
 }
 
 @media print {
   .no-print { display: none !important; }
   .print-only { display: block !important; }
 
-  /* #32：用紙サイズはB5・縦向き。用紙の横幅（B5縦の短辺）に収まるようレイアウトする */
-  @page { size: B5 portrait; margin: 8mm; }
+  /* #33：添付pptxと同じJIS B5・縦向き（182mm×257mm）、フチなしでヘッダーバーを全幅表示する */
+  @page { size: 182mm 257mm; margin: 0; }
 
   .map-sticky-wrapper {
     position: static !important;
     top: auto !important;
+    width: 68%;
+    margin: 8px auto 0;
+    border: 1px solid #D6DCE5;
+    border-radius: 4px;
+    overflow: hidden;
   }
   #mapContainer {
     width: 100% !important;
-    height: 100mm !important;
+    height: 60mm !important;
   }
 }
 </style>
