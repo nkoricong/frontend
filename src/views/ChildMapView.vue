@@ -63,12 +63,17 @@
     </div>
     <div v-if="loadError" class="alert alert-danger m-2">{{ loadError }}</div>
 
+    <!-- 共有中の表示（#34） -->
+    <div v-if="shareBanner" class="alert alert-info py-1 px-2 small mb-2 mx-2">
+      <i class="fas fa-share-alt"></i> {{ shareBanner }}
+    </div>
+
     <!-- 地図（オフライン時は保存済みの静止画像を表示） -->
     <!-- 住戸一覧をスクロールしても地図が隠れないよう、ヘッダー直下に固定表示する -->
     <template v-if="!usingCachedData">
       <div class="map-sticky-wrapper" :style="{ top: headerHeight + 'px' }">
         <div class="d-flex justify-content-end gap-2 px-2 mb-1">
-          <button class="btn btn-sm btn-outline-secondary" @click="toggleGestureMode">
+          <button v-if="mapVisible" class="btn btn-sm btn-outline-secondary" @click="toggleGestureMode">
             <i class="fas fa-hand-pointer"></i>
             {{ gestureMode === "greedy" ? "指2本で操作" : "指1本で操作" }}
           </button>
@@ -140,7 +145,7 @@
               <tr
                 v-else
                 :data-housing="row.house.HousingNo"
-                :class="{ 'table-warning': focusedHousing === row.house.HousingNo }"
+                :class="[houseRowClass(row.house), { 'table-warning': focusedHousing === row.house.HousingNo }]"
                 @click="focusHouse(row.house)"
                 style="cursor:pointer"
               >
@@ -210,7 +215,7 @@
             v-else
             :data-housing="row.house.HousingNo"
             class="card card-house mb-2"
-            :class="{ 'focused-house': focusedHousing === row.house.HousingNo, 'ms-3': row.grouped }"
+            :class="[houseRowClass(row.house), { 'focused-house': focusedHousing === row.house.HousingNo, 'ms-3': row.grouped }]"
             @click="focusHouse(row.house)"
           >
             <div class="card-body py-2 px-3">
@@ -357,6 +362,7 @@ const loading        = ref(true);
 const cardInfo       = ref(null);
 const childInfo      = ref(null);
 const houses         = ref([]);
+const shareInfo      = ref(null); // 現在有効な共有情報（#34）
 const statusFilter   = ref("");
 const focusedHousing = ref(null);
 const mapContainer   = ref(null);
@@ -388,6 +394,30 @@ const isOfflineCard = computed(() => {
   return childInfo.value?.ChildID ? isChildOffline(childInfo.value.ChildID) : false;
 });
 
+// 共有中の表示（#34）：自分が共有元か共有先かで文言を変える
+const shareBanner = computed(() => {
+  const s = shareInfo.value;
+  if (!s) return null;
+  const myId = authStore.userId;
+  if (myId != null && Number(s.sharedById) === Number(myId)) {
+    return `共有中：${s.claimedByName} さんへ　${formatDateTime(s.expiresAt)}まで`;
+  }
+  if (myId != null && Number(s.claimedById) === Number(myId)) {
+    return `共有元：${s.sharedByName} さんから　${formatDateTime(s.expiresAt)}まで`;
+  }
+  return null;
+});
+
+// 日時を「yyyy/MM/dd HH:mm」形式（日本時間）で表示する
+function formatDateTime(iso) {
+  if (!iso) return "-";
+  return new Date(iso).toLocaleString("ja-JP", {
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+    timeZone: "Asia/Tokyo",
+  });
+}
+
 // オフラインモード解除後：キャッシュ表示中だった場合はネットワークから最新データを取り直す
 async function handleOfflineReleased() {
   offlineVersion.value++;
@@ -401,6 +431,7 @@ async function handleOfflineReleased() {
       cardInfo.value  = res.cardInfo;
       childInfo.value = res.childInfo;
       houses.value    = res.houses;
+      shareInfo.value = res.shareInfo ?? null;
     }
   } catch (e) {
     console.error(e);
@@ -508,6 +539,15 @@ function rawVisitStatus(h) {
 function displayStatus(h) {
   if (h.NGFlag === "不可") return rawVisitStatus(h);
   return h.VisitStatus || "未訪問";
+}
+
+// 住戸リストの行背景色：訪問NGは薄いピンク、訪問済は薄い緑、不在は薄い黄色（#36）
+function houseRowClass(h) {
+  if (h.NGFlag === "不可") return "row-ng";
+  const status = h.VisitStatus || "未訪問";
+  if (status === "済") return "row-visited";
+  if (status === "不在") return "row-absent";
+  return "";
 }
 
 // 住戸リスト側からの選択：該当ピンを強調表示し、地図を移動して吹き出しを開く
@@ -768,6 +808,7 @@ onMounted(async () => {
       cardInfo.value  = res.cardInfo;
       childInfo.value = res.childInfo;
       houses.value    = res.houses;
+      shareInfo.value = res.shareInfo ?? null;
     } else {
       throw new Error(res.message || "取得に失敗しました");
     }
@@ -837,6 +878,17 @@ onUnmounted(() => {
 
 .building-row {
   background-color: #f1f3f5;
+}
+
+/* 住戸リストの行背景色（#36） */
+.row-ng {
+  background-color: #fde3ea;
+}
+.row-visited {
+  background-color: #e3f6e8;
+}
+.row-absent {
+  background-color: #fff3cd;
 }
 
 .col-id       { width: 48px;  text-align: center; }

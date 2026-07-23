@@ -62,10 +62,9 @@
         <tr>
           <th class="col-no">NO</th>
           <th class="col-name">氏名</th>
-          <th class="col-banchi">番地</th>
+          <th class="col-address">番地</th>
           <th class="col-status">訪問状況</th>
-          <th class="col-date-latest">最新訪問日</th>
-          <th class="col-date-met">最後に会えた日</th>
+          <th class="col-visitdates">最新訪問日／最後に会えた日</th>
           <th class="col-note">ノート</th>
         </tr>
       </thead>
@@ -73,10 +72,15 @@
         <tr v-for="h in printHouses" :key="h.DetailID">
           <td class="text-center col-no">{{ h.HousingNo }}</td>
           <td class="col-name">{{ h.FamilyName || "（表記なし）" }}</td>
-          <td class="text-center col-banchi">{{ printBanchi(h) }}</td>
+          <td class="col-address">
+            <div>{{ houseAddress(h) }}</div>
+            <div>{{ h.BuildingName }} {{ h.RoomNo }}</div>
+          </td>
           <td class="text-center col-status" :style="{ color: printVisitStatusColor(h) }">{{ printVisitStatusLabel(h) }}</td>
-          <td class="text-center col-date-latest">{{ latestVisitDate(h) }}</td>
-          <td class="text-center col-date-met">{{ lastMetDate(h) }}</td>
+          <td class="col-visitdates">
+            <div>最新の訪問日：{{ latestVisitDate(h) }}</div>
+            <div>最後に会えた日：{{ lastMetDate(h) }}</div>
+          </td>
           <td class="col-note"></td>
         </tr>
       </tbody>
@@ -155,12 +159,12 @@ const printHouses = computed(() => {
   return [...houses.value].sort((a, b) => (a.HousingNo ?? 0) - (b.HousingNo ?? 0));
 });
 
-// 「番地」欄：町名は見出しに共通表記済みのため、丁目-番地のみを表示する
-function printBanchi(h) {
+// 「番地」欄1行目：住所（町名＋番地/号）。address_swに応じてCSV由来／手入力を切替（#39）
+function houseAddress(h) {
   if (h.AddressSW === "直接入力") {
-    return `${h.InputCho ?? ""}-${h.InputBanchi ?? ""}`;
+    return `${h.InputTownName ?? ""}${h.InputCho ?? ""}-${h.InputBanchi ?? ""}`;
   }
-  return `${h.CSVCho ?? ""}-${h.CSVBanchi ?? ""}`;
+  return `${h.CSVTownName ?? ""}${h.CSVCho ?? ""}-${h.CSVBanchi ?? ""}`;
 }
 
 // 訪問状況ラベル：訪問NGを最優先、「済」は「訪問済」と表記する
@@ -402,13 +406,12 @@ onMounted(async () => {
   font-weight: 700;
 }
 .print-house-table td.col-status    { font-weight: 700; }
-.print-house-table .col-no          { width: 7%; }
-.print-house-table .col-name        { width: 18%; }
-.print-house-table .col-banchi      { width: 10%; }
-.print-house-table .col-status      { width: 14%; }
-.print-house-table .col-date-latest { width: 12%; }
-.print-house-table .col-date-met    { width: 21%; }
-.print-house-table .col-note        { width: 18%; }
+.print-house-table .col-no         { width: 7%; }
+.print-house-table .col-name       { width: 18%; }
+.print-house-table .col-address    { width: 20%; }
+.print-house-table .col-status     { width: 14%; }
+.print-house-table .col-visitdates { width: 23%; }
+.print-house-table .col-note       { width: 18%; }
 
 .print-footer {
   margin: 4px 10mm 0;

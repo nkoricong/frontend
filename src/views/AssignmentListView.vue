@@ -196,6 +196,16 @@
 
             <p v-if="child.DESCRIPTION" class="mb-1 small">{{ child.DESCRIPTION }}</p>
 
+            <!-- 共有中の表示（#34） -->
+            <div v-if="child.SHARED" class="alert alert-info py-1 px-2 small mb-1">
+              <i class="fas fa-share-alt"></i>
+              共有元：{{ child.SHAREDBYNAME }} さんから　{{ formatDateTime(child.SHAREEXPIRESAT) }}まで
+            </div>
+            <div v-if="child.SHAREDOUT" class="alert alert-warning py-1 px-2 small mb-1">
+              <i class="fas fa-share-alt"></i>
+              共有中：{{ child.SHAREDOUTTONAME }} さんへ　{{ formatDateTime(child.SHAREDOUTEXPIRESAT) }}まで
+            </div>
+
             <div class="d-flex justify-content-between align-items-center mt-2">
               <small class="text-muted">
                 貸出: {{ child.CHILDCHECKOUTDATE ?? "-" }} ／
@@ -321,6 +331,16 @@ function isOverdue(child) {
   today.setHours(0, 0, 0, 0);
   limit.setHours(0, 0, 0, 0);
   return limit < today;
+}
+
+// 共有期限日時を「yyyy/MM/dd HH:mm」形式（日本時間）で表示する（#34）
+function formatDateTime(iso) {
+  if (!iso) return "-";
+  return new Date(iso).toLocaleString("ja-JP", {
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+    timeZone: "Asia/Tokyo",
+  });
 }
 
 // カードの色ラベル（赤/青/黄/緑/白/★）をCSS色に変換する（区域リスト画面と同一の配色）
