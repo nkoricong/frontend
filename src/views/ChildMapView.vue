@@ -66,8 +66,8 @@
     <!-- 印刷／PDF出力専用：ヘッダー＋貸出情報＋QRコード（画面には表示しない、#30/#33） -->
     <!-- 添付の「子カード印刷サンプル.pptx」のレイアウトを再現する -->
     <div class="print-only print-header-bar">
-      <span class="print-status-badge">【{{ childInfo?.ChildStatus ?? "-" }}】</span>
-      <span class="print-header-title">{{ childInfo?.ChildBlock ?? "-" }}</span>
+      <span class="print-status-badge">{{ cardInfo?.CardNo ?? "-" }}-{{ childInfo?.ChildNo ?? "-" }}</span>
+      <span class="print-header-title">【{{ childInfo?.ChildStatus ?? "-" }}】{{ childInfo?.ChildBlock ?? "-" }}</span>
     </div>
     <div class="print-only print-meta-panel">
       <div class="print-meta-grid">
@@ -125,18 +125,20 @@
           <th class="col-name">氏名</th>
           <th class="col-banchi">番地</th>
           <th class="col-status">訪問状況</th>
-          <th class="col-date">最新訪問日</th>
-          <th class="col-date">最後に会えた日</th>
+          <th class="col-date-latest">最新訪問日</th>
+          <th class="col-date-met">最後に会えた日</th>
+          <th class="col-note">ノート</th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="h in printHouses" :key="'p-' + h.DetailID">
           <td class="text-center col-no">{{ h.HousingNo }}</td>
-          <td>{{ h.FamilyName || "（表記なし）" }}</td>
+          <td class="col-name">{{ h.FamilyName || "（表記なし）" }}</td>
           <td class="text-center col-banchi">{{ printBanchi(h) }}</td>
           <td class="text-center col-status" :style="{ color: printVisitStatusColor(h) }">{{ printVisitStatusLabel(h) }}</td>
-          <td class="text-center col-date">{{ latestVisitDate(h) }}</td>
-          <td class="text-center col-date">{{ lastMetDate(h) }}</td>
+          <td class="text-center col-date-latest">{{ latestVisitDate(h) }}</td>
+          <td class="text-center col-date-met">{{ lastMetDate(h) }}</td>
+          <td class="col-note"></td>
         </tr>
       </tbody>
     </table>
@@ -1085,7 +1087,7 @@ onUnmounted(() => {
   margin: 0 10mm;
   table-layout: fixed;
   border-collapse: collapse;
-  font-size: 7.5px;
+  font-size: 12pt;
 }
 .print-house-table th,
 .print-house-table td {
@@ -1097,13 +1099,14 @@ onUnmounted(() => {
   background: #F5F7FA;
   font-weight: 700;
 }
-.print-house-table td.col-status { font-weight: 700; }
-.print-house-table .col-no      { width: 8%; }
-.print-house-table .col-name    { width: 21%; }
-.print-house-table .col-banchi  { width: 13%; }
-.print-house-table .col-status  { width: 17%; }
-.print-house-table .col-date    { width: 15%; }
-.print-house-table .col-date:last-child { width: 26%; }
+.print-house-table td.col-status  { font-weight: 700; }
+.print-house-table .col-no         { width: 7%; }
+.print-house-table .col-name       { width: 18%; }
+.print-house-table .col-banchi     { width: 10%; }
+.print-house-table .col-status     { width: 14%; }
+.print-house-table .col-date-latest { width: 12%; }
+.print-house-table .col-date-met   { width: 21%; }
+.print-house-table .col-note       { width: 18%; }
 
 .print-footer {
   margin: 4px 10mm 0;
